@@ -1,0 +1,6 @@
+{
+  "name": "PashuFeed Pro - Cattle Feed Shop & Farm Management",
+  "description": "Commercial SaaS & E-Commerce platform for cattle feed shops, dairy farmers, POS billing, inventory, credit management, and nutrition AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
