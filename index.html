@@ -1,13 +1,96 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scroll Animation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 500vh; /* Make body tall enough to scroll */
+            background-color: #000;
+        }
 
+        #animation-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        canvas {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+    </style>
+</head>
+<body>
+    <div id="animation-container">
+        <canvas id="frame-canvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('frame-canvas');
+        const context = canvas.getContext('2d');
+        
+        const frameCount = 600;
+        const currentFrame = index => (
+            `frames/cattle_frames_60fps/frame_${index.toString().padStart(4, '0')}.jpg`
+        );
+
+        // Preload images
+        const images = [];
+        for (let i = 1; i <= frameCount; i++) {
+            const img = new Image();
+            img.src = currentFrame(i);
+            images.push(img);
+            img.onload = () => {
+                // Draw the first frame when it's loaded
+                if (i === 1) {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    context.drawImage(img, 0, 0);
+                }
+            };
+        }
+
+        window.addEventListener('scroll', () => {
+            const scrollTop = document.documentElement.scrollTop;
+            const maxScrollTop = document.documentElement.scrollHeight - window.innerHeight;
+            
+            const scrollFraction = scrollTop / maxScrollTop;
+            
+            const frameIndex = Math.min(
+                frameCount - 1,
+                Math.floor(scrollFraction * frameCount)
+            );
+            
+            if (images[frameIndex] && images[frameIndex].complete) {
+                requestAnimationFrame(() => {
+                    context.drawImage(images[frameIndex], 0, 0);
+                });
+            }
+        });
+        
+        window.addEventListener('resize', () => {
+             const scrollTop = document.documentElement.scrollTop;
+             const maxScrollTop = document.documentElement.scrollHeight - window.innerHeight;
+             const scrollFraction = scrollTop / maxScrollTop;
+             const frameIndex = Math.min(
+                frameCount - 1,
+                Math.floor(scrollFraction * frameCount)
+             );
+             if (images[frameIndex] && images[frameIndex].complete) {
+                 context.drawImage(images[frameIndex], 0, 0);
+             }
+        });
+    </script>
+</body>
+</html>
