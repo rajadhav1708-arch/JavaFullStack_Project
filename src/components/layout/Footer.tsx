@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { Phone, Mail, MapPin, ShieldCheck, Truck, Clock, Award, Heart } from 'lucide-react';
+import { Phone, Mail, MapPin, ShieldCheck, Truck, Clock, Award } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   const { setCurrentView } = useApp();

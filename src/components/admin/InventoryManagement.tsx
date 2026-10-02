@@ -3,16 +3,11 @@ import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
 import { PRODUCT_CATEGORIES } from '../../data/mockData';
 import {
-  Package,
   Plus,
   Search,
-  Filter,
   Download,
-  AlertTriangle,
-  Edit,
   Trash2,
   X,
-  CheckCircle2,
 } from 'lucide-react';
 
 export const InventoryManagement: React.FC = () => {

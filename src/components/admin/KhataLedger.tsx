@@ -2,16 +2,10 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KhataAccount } from '../../types';
 import {
-  BookOpen,
   Search,
   Plus,
   Send,
-  CheckCircle2,
-  AlertTriangle,
-  History,
   X,
-  CreditCard,
-  PhoneCall,
 } from 'lucide-react';
 
 export const KhataLedger: React.FC = () => {

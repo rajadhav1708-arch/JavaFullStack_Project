@@ -5,15 +5,11 @@ import {
   X,
   ShoppingBag,
   Heart,
-  ShieldCheck,
   Check,
   Award,
-  Truck,
   Repeat,
   Sparkles,
   Info,
-  Calendar,
-  Layers,
 } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {

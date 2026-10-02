@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Settings, Store, ShieldCheck, Bell, Save } from 'lucide-react';
+import { Settings, Store, Save } from 'lucide-react';
 
 export const SettingsPanel: React.FC = () => {
   const { addToast } = useApp();

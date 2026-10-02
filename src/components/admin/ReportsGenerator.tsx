@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { FileText, Download, Printer, CheckCircle2 } from 'lucide-react';
+import { FileText, Download } from 'lucide-react';
 
 export const ReportsGenerator: React.FC = () => {
   const { addToast } = useApp();

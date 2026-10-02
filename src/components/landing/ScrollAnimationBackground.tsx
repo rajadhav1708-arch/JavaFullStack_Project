@@ -5,7 +5,9 @@ export const ScrollAnimationBackground: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [useVideo, setUseVideo] = useState(true);
 
-  // Video sources for Cattle Feed & Grain 3D Animation - using local video with external fallbacks
+  // Scroll-scrubbed background video. The onError handler advances to the next entry,
+  // so the local clip is an optional drop-in asset: place a real file at
+  // public/videos/cattle_feed_scroll.mp4 to use it, otherwise the remote clips render.
   const feedVideoSources = [
     '/videos/cattle_feed_scroll.mp4',
     'https://assets.mixkit.co/videos/preview/mixkit-cows-grazing-in-a-green-field-43029-large.mp4',
@@ -39,7 +41,9 @@ export const ScrollAnimationBackground: React.FC = () => {
     };
   }, [useVideo]);
 
-  // Canvas Image Frame Fallback if Video is unavailable or fails
+  // Canvas image-frame fallback, used only if every video source fails.
+  // Drop numbered JPEGs at public/frames/cattle_frames_60fps/frame_0001.jpg... to use it;
+  // with no frames present the procedural particle loop below renders instead.
   useEffect(() => {
     if (useVideo) return;
 

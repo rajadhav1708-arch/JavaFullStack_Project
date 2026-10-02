@@ -13,9 +13,7 @@ import {
   Eye,
   ShoppingBag,
   RotateCcw,
-  Check,
   ShieldCheck,
-  Sparkles,
   X,
 } from 'lucide-react';
 

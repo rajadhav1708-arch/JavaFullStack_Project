@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RatingStars } from '../common/RatingStars';
 import { Product } from '../../types';
-import { ShoppingBag, Heart, Eye, Check, ArrowRight, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, Heart, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const FeaturedProducts: React.FC = () => {
   const { products, addToCart, wishlist, toggleWishlist, setSelectedProduct, setCurrentView } = useApp();

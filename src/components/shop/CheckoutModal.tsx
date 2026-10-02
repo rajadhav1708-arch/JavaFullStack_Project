@@ -7,13 +7,10 @@ import {
   CreditCard,
   CheckCircle2,
   ShieldCheck,
-  Building2,
-  User,
   Phone,
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  ShoppingBag,
 } from 'lucide-react';
 
 export const CheckoutModal: React.FC = () => {

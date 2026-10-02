@@ -1,20 +1,62 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Sparkles, MessageSquare, X, Send, Bot, User, Stethoscope, HeartPulse, ShieldCheck, GripVertical } from 'lucide-react';
+import { Sparkles, X, Send, Stethoscope, HeartPulse, GripVertical } from 'lucide-react';
+import type { MainView } from '../../types';
+
+interface ChatMessage {
+  sender: 'ai' | 'user';
+  text: string;
+  actionBtn?: { label: string; view: MainView };
+}
+
+interface ChatApiReply {
+  text: string;
+  actionBtn?: { label: string; view: MainView };
+}
+
+/**
+ * Canned answers used only when the Gemini backend is unreachable, so the widget
+ * stays demonstrable without an API key. Surfaced to the user as "demo mode".
+ */
+const DEMO_REPLIES: { match: RegExp; text: string; actionBtn?: ChatMessage['actionBtn'] }[] = [
+  {
+    match: /fat|snf/i,
+    text: 'Dr. Advice: To push milk fat percentage above 4.5%, feed bypass fat at 100-150 g/day alongside your high-protein pellet. Bypass fat passes the rumen intact, so more of it reaches the udder for fat synthesis.',
+    actionBtn: { label: 'Open Ration Calculator', view: 'nutrition-quiz' },
+  },
+  {
+    match: /calf/i,
+    text: 'Dr. Advice: Calf starter feed at 24% crude protein speeds up rumen papillae development. Introduce it from 15 days of age to hit roughly 500 g of daily weight gain through weaning.',
+  },
+  {
+    match: /khata|credit/i,
+    text: 'Dr. Advice: The Farmer Credit Khata lets registered dairy farmers buy feed on credit, settled automatically against milk-collection union payouts. Open your dashboard to see outstanding balances.',
+    actionBtn: { label: 'View Khata Ledger', view: 'customer-dashboard' },
+  },
+  {
+    match: /.*/,
+    text: 'Dr. Advice: For steady milk yield without risking rumen acidosis, hold a 60:40 forage-to-concentrate ratio and supplement with ionic calcium and bypass fat.',
+  },
+];
+
+function getDemoReply(question: string): ChatApiReply {
+  const hit = DEMO_REPLIES.find((r) => r.match.test(question));
+  return { text: hit?.text ?? '', actionBtn: hit?.actionBtn };
+}
 
 export const AIChatbotWidget: React.FC = () => {
   const { setSelectedProduct, setCurrentView, products, khataRecords } = useApp();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState<
-    { sender: 'ai' | 'user'; text: string; actionBtn?: { label: string; view: string } }[]
-  >([
+  const [messages, setMessages] = useState<ChatMessage[]>([
     {
       sender: 'ai',
-      text: 'Namaste! I am Dr. Pashu AI, your certified veterinary & dairy nutrition advisor. How can I help with your cattle health or feed today?',
+      text: 'Namaste! I am Dr. Pashu AI, your veterinary & dairy nutrition advisor. How can I help with your cattle health or feed today?',
     },
   ]);
   const [inputText, setInputText] = useState('');
+  const [isThinking, setIsThinking] = useState(false);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   // Drag & Drop state
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -73,37 +115,65 @@ export const AIChatbotWidget: React.FC = () => {
     'How does Khata credit work?',
   ];
 
-  const handleSend = (textToSend?: string) => {
-    const text = textToSend || inputText;
-    if (!text.trim()) return;
+  const handleSend = async (textToSend?: string) => {
+    const text = (textToSend || inputText).trim();
+    if (!text.trim() || isThinking) return;
 
-    // Add User Message
-    const newMsgs = [...messages, { sender: 'user' as const, text }];
-    setMessages(newMsgs);
+    const userMessage: ChatMessage = { sender: 'user', text };
+    setMessages((prev) => [...prev, userMessage]);
     setInputText('');
+    setIsThinking(true);
 
-    // Generate Contextual AI Response
-    setTimeout(() => {
-      let responseText =
-        'As a veterinary rule of thumb, to maximize milk yield while preserving rumen pH, maintain a 60:40 forage-to-concentrate ratio and supplement with ionic calcium & bypass fat.';
-      let actionBtn;
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: text,
+          history: messages,
+          products: products.map((p) => ({
+            name: p.name,
+            brand: p.brand,
+            category: p.category,
+            price: p.price,
+          })),
+          khataSummary: {
+            outstanding: khataRecords.reduce((sum, r) => sum + (r.totalOutstanding ?? 0), 0),
+            records: khataRecords.length,
+          },
+        }),
+      });
 
-      const q = text.toLowerCase();
-      if (q.includes('fat') || q.includes('snf')) {
-        responseText =
-          'Dr. Advice: To boost milk fat percentage above 4.5%, feed Bypass Fat 99 (100-150g/day) along with PashuPoshan Gold Pellets. Bypass fat bypasses rumen degradation for maximum fat synthesis!';
-        actionBtn = { label: 'Try AI Ration Calculator', view: 'ration-calculator' };
-      } else if (q.includes('calf')) {
-        responseText =
-          'Dr. Advice: Calf starter feeds with 24% Crude Protein accelerate early rumen papillae development. Start NutriCalf Starter from 15 days of age for optimal 500g daily weight gain.';
-      } else if (q.includes('khata') || q.includes('credit')) {
-        responseText =
-          'Dr. Advice: Our Farmer Credit Khata allows registered dairy farmers to obtain feed on credit up to ₹50,000. Balance is auto-settled through milk collection union payouts.';
-        actionBtn = { label: 'View Khata Ledger', view: 'customer-dashboard' };
+      if (!res.ok) {
+        const detail = await res.json().catch(() => null);
+        if (res.status === 503 || detail?.error === 'AI_DISABLED') {
+          setIsDemoMode(true);
+          throw new Error('AI_DISABLED');
+        }
+        throw new Error(detail?.message ?? `Request failed (${res.status})`);
       }
 
-      setMessages((prev) => [...prev, { sender: 'ai', text: responseText, actionBtn }]);
-    }, 600);
+      const reply = (await res.json()) as ChatApiReply;
+      setIsDemoMode(false);
+      setMessages((prev) => [...prev, { sender: 'ai', text: reply.text, actionBtn: reply.actionBtn }]);
+    } catch (error) {
+      const offline = error instanceof Error && error.message === 'AI_DISABLED';
+      if (!offline) setIsDemoMode(true);
+
+      const demo = getDemoReply(text);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: 'ai',
+          text: offline
+            ? demo.text
+            : `Dr. Advice: I could not reach the AI service just now, so here is a standard answer. ${demo.text}`,
+          actionBtn: demo.actionBtn,
+        },
+      ]);
+    } finally {
+      setIsThinking(false);
+    }
   };
 
   return (
@@ -239,9 +309,16 @@ export const AIChatbotWidget: React.FC = () => {
               Free Tele-Consultation Active
             </span>
             <span className="text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">
-              Verified Vet AI
+              {isDemoMode ? 'Demo Mode' : 'Verified Vet AI'}
             </span>
           </div>
+
+          {isDemoMode && (
+            <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-1.5 text-[10px] text-amber-900 leading-relaxed">
+              AI service unavailable, so these are canned answers. Add a GEMINI_API_KEY in .env and
+              start the API server for live replies.
+            </div>
+          )}
 
           {/* Messages Body */}
           <div className="p-4 space-y-3 overflow-y-auto flex-1 text-xs select-text">
@@ -285,8 +362,10 @@ export const AIChatbotWidget: React.FC = () => {
                   {m.actionBtn && (
                     <button
                       onClick={() => {
-                        setCurrentView(m.actionBtn!.view as any);
-                        setIsOpen(false);
+                        if (m.actionBtn) {
+                          setCurrentView(m.actionBtn.view);
+                          setIsOpen(false);
+                        }
                       }}
                       className="mt-2.5 bg-[#10b981] hover:bg-[#059669] text-white text-[11px] font-bold px-3 py-1.5 rounded-lg w-full text-center transition-colors cursor-pointer"
                     >
@@ -296,15 +375,29 @@ export const AIChatbotWidget: React.FC = () => {
                 </div>
               </div>
             ))}
+            {isThinking && (
+              <div className="flex gap-2.5 justify-start">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-emerald-400 p-0.5 shrink-0">
+                  <div className="w-full h-full bg-slate-900 rounded-full" />
+                </div>
+                <div className="bg-slate-100 border border-slate-200 rounded-2xl rounded-bl-xs px-3 py-2.5 text-slate-500">
+                  <span className="inline-flex gap-1 items-center">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:120ms]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:240ms]" />
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Quick Prompts */}
           <div className="p-2 bg-slate-50 border-t border-slate-100 flex gap-1.5 overflow-x-auto scrollbar-none">
             {quickQuestions.map((q, i) => (
               <button
                 key={i}
                 onClick={() => handleSend(q)}
-                className="whitespace-nowrap bg-white border border-slate-200 hover:border-emerald-600 text-slate-700 text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0 cursor-pointer transition-colors"
+                disabled={isThinking}
+                className="whitespace-nowrap bg-white border border-slate-200 hover:border-emerald-600 disabled:opacity-50 text-slate-700 text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0 cursor-pointer transition-colors"
               >
                 {q}
               </button>
@@ -317,13 +410,15 @@ export const AIChatbotWidget: React.FC = () => {
               type="text"
               placeholder="Ask Dr. Pashu about cow feed, fat %, or Khata..."
               value={inputText}
+              disabled={isThinking}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              className="flex-1 bg-slate-100 text-xs text-slate-900 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-[#10b981]"
+              className="flex-1 bg-slate-100 text-xs text-slate-900 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-[#10b981] disabled:opacity-60"
             />
             <button
               onClick={() => handleSend()}
-              className="bg-[#064e3b] hover:bg-[#065f46] text-white p-2 rounded-xl cursor-pointer transition-colors"
+              disabled={isThinking}
+              className="bg-[#064e3b] hover:bg-[#065f46] disabled:opacity-50 text-white p-2 rounded-xl cursor-pointer transition-colors"
             >
               <Send className="w-4 h-4" />
             </button>

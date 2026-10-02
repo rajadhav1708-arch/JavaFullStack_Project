@@ -46,12 +46,13 @@ const MainAppContent: React.FC = () => {
         )}
 
         {currentView === 'shop' && <ProductListing />}
-        {currentView === 'ration-calculator' && <SmartRationQuiz />}
+        {currentView === 'nutrition-quiz' && <SmartRationQuiz />}
+        {currentView === 'services' && <FarmerServicesSection />}
         {currentView === 'checkout' && <CheckoutModal />}
         {currentView === 'order-tracking' && <OrderTrackingModal />}
         {currentView === 'customer-dashboard' && <CustomerDashboard />}
         {currentView === 'subscriptions' && <SubscriptionManager />}
-        {currentView === 'admin' && <AdminLayout />}
+        {currentView === 'admin-dashboard' && <AdminLayout />}
       </main>
 
       {/* Global Overlays & Widgets */}

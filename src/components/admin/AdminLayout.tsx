@@ -73,7 +73,7 @@ export const AdminLayout: React.FC = () => {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => setAdminTab(item.id as any)}
+                    onClick={() => setAdminTab(item.id)}
                     className={`w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer ${
                       isActive
                         ? 'bg-[#065f46] border-r-4 border-[#10b981] text-white font-bold'

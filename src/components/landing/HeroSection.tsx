@@ -30,11 +30,12 @@ export const HeroSection: React.FC = () => {
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(true);
 
-  // Dairy Farm Cow Eating video sources (local public path with reliable fallback streams)
+  // Hero background video, tried in order. The onError handler below advances to the
+  // next entry, so local clips are optional drop-in assets: drop a real file at
+  // public/videos/cow_eating.mp4 to use it, and if absent the remote clips take over.
   const videoSources = [
     '/videos/cow_eating.mp4',
-    '/videos/dairy_farm_cow.mp4',
-    'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+    'https://assets.mixkit.co/videos/preview/mixkit-cows-grazing-in-a-green-field-43029-large.mp4',
     'https://assets.mixkit.co/videos/preview/mixkit-cows-in-a-pasture-42686-large.mp4',
   ];
 
@@ -109,7 +110,7 @@ export const HeroSection: React.FC = () => {
 
               <button
                 id="btn-ration-calculator"
-                onClick={() => setCurrentView('ration-calculator')}
+                onClick={() => setCurrentView('nutrition-quiz')}
                 className="flex items-center gap-2 bg-slate-800/90 hover:bg-slate-700 border border-slate-700 text-white font-semibold text-sm px-5 py-3.5 rounded-2xl transition-all cursor-pointer"
               >
                 <Calculator className="w-4 h-4 text-emerald-400" />

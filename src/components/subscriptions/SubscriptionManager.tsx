@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { Repeat, Calendar, CheckCircle2, PauseCircle, Trash2, ArrowRight } from 'lucide-react';
+import { Repeat, Calendar, Trash2, ArrowRight } from 'lucide-react';
 
 export const SubscriptionManager: React.FC = () => {
   const { subscriptions, cancelSubscription, setCurrentView } = useApp();

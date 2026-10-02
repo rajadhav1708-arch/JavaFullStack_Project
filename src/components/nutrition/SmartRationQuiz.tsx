@@ -8,9 +8,7 @@ import {
   ArrowRight,
   ArrowLeft,
   Sparkles,
-  TrendingUp,
   ShoppingBag,
-  ShieldCheck,
   Check,
 } from 'lucide-react';
 

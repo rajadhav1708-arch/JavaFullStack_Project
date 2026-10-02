@@ -6,10 +6,8 @@ import {
   ShoppingBag,
   ArrowRight,
   Truck,
-  ShieldCheck,
   Plus,
   Minus,
-  Sparkles,
 } from 'lucide-react';
 
 export const CartDrawer: React.FC = () => {

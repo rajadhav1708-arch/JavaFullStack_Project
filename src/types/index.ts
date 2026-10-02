@@ -19,9 +19,9 @@ export type AdminTab =
   | 'inventory'
   | 'pos'
   | 'khata'
-  | 'orders'
+  | 'crm'
   | 'suppliers'
-  | 'deliveries'
+  | 'delivery'
   | 'offers'
   | 'reports'
   | 'settings';
@@ -180,15 +180,14 @@ export type KhataAccount = KhataRecord;
 export interface Supplier {
   id: string;
   name: string;
+  category: string;
   contactPerson: string;
   phone: string;
   email: string;
-  location: string;
-  productsSupplied: string[];
-  totalPurchases: number;
-  pendingPayment: number;
+  address: string;
+  leadTimeDays: number;
+  activeOrders: number;
   rating: number;
-  lastSupplyDate: string;
 }
 
 export interface Subscription {

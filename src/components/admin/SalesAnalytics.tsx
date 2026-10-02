@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { MOCK_SALES_ANALYTICS } from '../../data/mockData';
-import { BarChart3, TrendingUp, PieChart, Calendar, DollarSign, ArrowUpRight } from 'lucide-react';
+import { BarChart3, PieChart, ArrowUpRight } from 'lucide-react';
 
 export const SalesAnalytics: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month' | 'year'>('month');

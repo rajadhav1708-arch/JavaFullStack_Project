@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Building2, Phone, Mail, Plus, Truck, PackageCheck, Clock, X } from 'lucide-react';
+import { Phone, Plus, X } from 'lucide-react';
+import { Supplier } from '../../types';
 
 export const SupplierManagement: React.FC = () => {
   const { addToast } = useApp();
   const [isPoModalOpen, setIsPoModalOpen] = useState(false);
 
-  const suppliers = [
+  const suppliers: Supplier[] = [
     {
       id: 'sup-1',
       name: 'Godrej Agrovet Cattle Feeds',

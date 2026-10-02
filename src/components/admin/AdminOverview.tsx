@@ -3,12 +3,10 @@ import { useApp } from '../../context/AppContext';
 import { MOCK_SALES_ANALYTICS } from '../../data/mockData';
 import {
   TrendingUp,
-  ShoppingBag,
   AlertTriangle,
   ShieldCheck,
   ArrowUpRight,
   Plus,
-  Package,
   Truck,
 } from 'lucide-react';
 

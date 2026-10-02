@@ -1,14 +1,17 @@
 node_modules/
-build/
 dist/
+build/
 coverage/
-.DS_Store
-*.log
-.env*
+
+.env
+.env.local
+.env.*.local
 !.env.example
 
-extracted/
-extracted2/
-assets/
-*.zip
-PROJECT_NOTES.md
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+.vscode/
+.idea/

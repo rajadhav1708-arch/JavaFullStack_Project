@@ -1,5 +1,5 @@
 import React from 'react';
-import { Ticket, Plus, Tag, Sparkles } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 export const OffersAndDiscounts: React.FC = () => {
   const coupons = [

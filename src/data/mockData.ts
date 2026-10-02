@@ -1,4 +1,4 @@
-import { Product, ProductCategory, Order, KhataRecord, Supplier, Subscription, NotificationItem, Review } from '../types';
+import { Product, ProductCategory, Order, KhataRecord, Subscription, NotificationItem, Review } from '../types';
 
 export const PRODUCT_CATEGORIES: {
   id: ProductCategory;
@@ -679,48 +679,6 @@ export const MOCK_KHATA_RECORDS: KhataRecord[] = [
         notes: 'UPI Transfer (Full Khata Settlement)',
       },
     ],
-  },
-];
-
-export const MOCK_SUPPLIERS: Supplier[] = [
-  {
-    id: 'sup-1',
-    name: 'PashuPoshan Mills Pvt Ltd',
-    contactPerson: 'Rajendra Verma',
-    phone: '+91 98100 22334',
-    email: 'orders@pashuposhan.com',
-    location: 'MIDC Shiroli, Kolhapur',
-    productsSupplied: ['PashuPoshan Gold Milch Pellets', 'NutriCalf Rumen Starter'],
-    totalPurchases: 450000,
-    pendingPayment: 65000,
-    rating: 4.9,
-    lastSupplyDate: '2026-08-04',
-  },
-  {
-    id: 'sup-2',
-    name: 'DairyMax Agro Industries',
-    contactPerson: 'Sanjay Mehta',
-    phone: '+91 98220 55667',
-    email: 'supply@dairymax.in',
-    location: 'Anand, Gujarat',
-    productsSupplied: ['Murrah Special Buffalo Feed'],
-    totalPurchases: 320000,
-    pendingPayment: 0,
-    rating: 4.8,
-    lastSupplyDate: '2026-07-29',
-  },
-  {
-    id: 'sup-3',
-    name: 'VetVital Care Laboratories',
-    contactPerson: 'Dr. Ashok Kulkarni',
-    phone: '+91 94230 88990',
-    email: 'sales@vetvitalcare.com',
-    location: 'Pune Industrial Area',
-    productsSupplied: ['Veer-Cal Liquid Calcium', 'Mastitis Shield Gel'],
-    totalPurchases: 180000,
-    pendingPayment: 18000,
-    rating: 4.7,
-    lastSupplyDate: '2026-08-01',
   },
 ];
 

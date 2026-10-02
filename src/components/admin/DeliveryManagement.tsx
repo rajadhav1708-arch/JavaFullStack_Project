@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { Truck, MapPin, Phone, User, CheckCircle2, Clock } from 'lucide-react';
+import { Truck, Phone } from 'lucide-react';
 
 export const DeliveryManagement: React.FC = () => {
   const { orders } = useApp();

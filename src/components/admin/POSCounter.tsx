@@ -4,14 +4,7 @@ import { Product, CartItem } from '../../types';
 import {
   Store,
   Search,
-  Plus,
-  Minus,
-  Trash2,
   Printer,
-  CreditCard,
-  User,
-  ShieldCheck,
-  CheckCircle2,
   X,
   Scan,
 } from 'lucide-react';

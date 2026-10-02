@@ -4,13 +4,8 @@ import {
   ShoppingBag,
   ShieldCheck,
   Repeat,
-  Heart,
   Award,
   Truck,
-  Calendar,
-  CheckCircle2,
-  Clock,
-  ArrowRight,
 } from 'lucide-react';
 
 export const CustomerDashboard: React.FC = () => {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Users, Search, Phone, MapPin, Award, Plus, CheckCircle2 } from 'lucide-react';
+import { Search, Phone, MapPin } from 'lucide-react';
 
 export const CustomerCRM: React.FC = () => {
   const { khataRecords } = useApp();
