@@ -1,0 +1,238 @@
+export type UserRole = 'customer' | 'admin' | 'employee';
+
+export type MainView =
+  | 'home'
+  | 'shop'
+  | 'nutrition-quiz'
+  | 'services'
+  | 'subscriptions'
+  | 'offers'
+  | 'cart'
+  | 'checkout'
+  | 'order-tracking'
+  | 'customer-dashboard'
+  | 'admin-dashboard';
+
+export type AdminTab =
+  | 'overview'
+  | 'analytics'
+  | 'inventory'
+  | 'pos'
+  | 'khata'
+  | 'orders'
+  | 'suppliers'
+  | 'deliveries'
+  | 'offers'
+  | 'reports'
+  | 'settings';
+
+export type ProductCategory =
+  | 'Dairy Cattle Feed'
+  | 'Buffalo Feed'
+  | 'Calf Starter Feed'
+  | 'Mineral & Calcium'
+  | 'Protein & Bypass Fat'
+  | 'Feed Pellets & Concentrates'
+  | 'Silage & Fodder'
+  | 'Veterinary Care';
+
+export interface NutritionalInfo {
+  crudeProtein: string;
+  crudeFiber: string;
+  crudeFat: string;
+  calcium: string;
+  phosphorus: string;
+  tdnEnergy: string;
+  vitamins: string;
+}
+
+export interface Review {
+  id: string;
+  author: string;
+  location: string;
+  rating: number;
+  date: string;
+  comment: string;
+  verifiedFarmer: boolean;
+  farmSize?: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  category: ProductCategory;
+  suitableFor: ('Cow' | 'Buffalo' | 'Calf' | 'Pregnant Heifer')[];
+  description: string;
+  nutritionalInfo: NutritionalInfo;
+  ingredients: string[];
+  feedingInstructions: string;
+  benefits: string[];
+  weightOptions: { weightKg: number; price: number; stock: number }[];
+  selectedWeightKg: number;
+  price: number;
+  originalPrice: number;
+  discountPercent: number;
+  rating: number;
+  reviewCount: number;
+  inStock: boolean;
+  stockCount: number;
+  minStockLevel: number;
+  sku: string;
+  batchNumber: string;
+  expiryDate: string;
+  image: string;
+  isBestSeller?: boolean;
+  isRecommended?: boolean;
+}
+
+export interface CartItem {
+  product: Product;
+  weightKg: number;
+  price: number;
+  quantity: number;
+  isSubscription?: boolean;
+  subscriptionFrequencyDays?: number;
+}
+
+export interface ShippingAddress {
+  fullName: string;
+  phone: string;
+  villageTown: string;
+  talukaDistrict: string;
+  state: string;
+  pincode: string;
+  landmark?: string;
+  isDefault?: boolean;
+}
+
+export type OrderStatus =
+  | 'Placed'
+  | 'Confirmed'
+  | 'Packed'
+  | 'Shipped'
+  | 'Out for Delivery'
+  | 'Delivered'
+  | 'Cancelled';
+
+export interface OrderItem {
+  productId: string;
+  productName: string;
+  brand: string;
+  weightKg: number;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  image: string;
+}
+
+export interface Order {
+  id: string;
+  orderNumber: string;
+  date: string;
+  customerName: string;
+  customerPhone: string;
+  customerVillage: string;
+  items: OrderItem[];
+  subtotal: number;
+  discount: number;
+  deliveryCharge: number;
+  tax: number;
+  totalAmount: number;
+  paymentMethod: 'UPI' | 'Cash on Delivery' | 'Khata Credit' | 'Netbanking' | 'Card';
+  paymentStatus: 'Paid' | 'Pending' | 'Khata Due';
+  status: OrderStatus;
+  deliveryType: 'Standard Farm Delivery' | 'Express Tractor Express' | 'Store Pickup';
+  shippingAddress: ShippingAddress;
+  estimatedDeliveryDate: string;
+  trackingStepIndex: number;
+  assignedDriver?: {
+    name: string;
+    phone: string;
+    vehicleNo: string;
+  };
+}
+
+export interface KhataRecord {
+  id: string;
+  customerId: string;
+  customerName: string;
+  phone: string;
+  village: string;
+  totalCreditLimit: number;
+  totalOutstanding: number;
+  paidAmount: number;
+  lastPurchaseDate: string;
+  dueDate: string;
+  status: 'Paid' | 'Partially Paid' | 'Due' | 'Overdue';
+  transactions: {
+    id: string;
+    date: string;
+    type: 'Purchase' | 'Payment';
+    amount: number;
+    notes: string;
+    orderNumber?: string;
+  }[];
+}
+
+export type KhataAccount = KhataRecord;
+
+export interface Supplier {
+  id: string;
+  name: string;
+  contactPerson: string;
+  phone: string;
+  email: string;
+  location: string;
+  productsSupplied: string[];
+  totalPurchases: number;
+  pendingPayment: number;
+  rating: number;
+  lastSupplyDate: string;
+}
+
+export interface Subscription {
+  id: string;
+  productName: string;
+  brand: string;
+  weightKg: number;
+  quantity: number;
+  frequencyDays: number;
+  nextDeliveryDate: string;
+  status: 'Active' | 'Paused' | 'Cancelled';
+  deliveryAddress: string;
+  pricePerDelivery: number;
+}
+
+export interface RationRecommendationInput {
+  animalType: 'Cow' | 'Buffalo' | 'Calf' | 'Pregnant Heifer';
+  breed?: string;
+  milkYieldLiters: number;
+  fatPercentTarget: number;
+  lactationStage: 'Early (1-3 Mo)' | 'Peak (3-6 Mo)' | 'Late (6-10 Mo)' | 'Dry Period';
+  currentFeedType: string;
+  healthGoals: string[];
+  numberOfAnimals: number;
+}
+
+export interface FeedRecommendationResult {
+  dailyRationKg: number;
+  recommendedProducts: {
+    product: Product;
+    dailyQtyKg: number;
+    reasoning: string;
+  }[];
+  expectedYieldIncrease: string;
+  estimatedFatBoost: string;
+  healthBenefits: string[];
+  monthlyCostEstimate: number;
+}
+
+export interface NotificationItem {
+  id: string;
+  title: string;
+  message: string;
+  timestamp: string;
+  type: 'order' | 'inventory' | 'credit' | 'system' | 'offer';
+  read: boolean;
+}

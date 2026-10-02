@@ -6,3 +6,9 @@ coverage/
 *.log
 .env*
 !.env.example
+
+extracted/
+extracted2/
+assets/
+*.zip
+PROJECT_NOTES.md
