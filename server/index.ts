@@ -3,6 +3,7 @@ import { GoogleGenAI } from '@google/genai';
 import './env';
 import { checkDb, isDbConfigured } from './db';
 import { authRouter } from './routes/auth';
+import { productsRouter } from './routes/products';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
@@ -113,6 +114,7 @@ app.get('/api/health/db', async (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
+app.use('/api', productsRouter);
 
 app.post('/api/chat', async (req, res) => {
   if (!API_KEY) {

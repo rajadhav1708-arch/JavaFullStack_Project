@@ -5,7 +5,15 @@ import { Product } from '../../types';
 import { ShoppingBag, Heart, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const FeaturedProducts: React.FC = () => {
-  const { products, addToCart, wishlist, toggleWishlist, setSelectedProduct, setCurrentView } = useApp();
+  const {
+    products,
+    addToCart,
+    wishlist,
+    toggleWishlist,
+    setSelectedProduct,
+    setCurrentView,
+    isCatalogueLoading,
+  } = useApp();
   const [scrollY, setScrollY] = useState(0);
 
   useEffect(() => {
@@ -43,6 +51,14 @@ export const FeaturedProducts: React.FC = () => {
 
         {/* Product Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Products load from the API; placeholders avoid a collapsed grid. */}
+          {isCatalogueLoading &&
+            Array.from({ length: 4 }).map((_, index) => (
+              <div
+                key={`skeleton-${index}`}
+                className="h-80 rounded-2xl bg-slate-900/40 border border-slate-700/60 animate-pulse"
+              />
+            ))}
           {featuredList.map((product, index) => {
             const isWishlisted = wishlist.includes(product.id);
             const parallaxDirection = index % 2 === 0 ? 1 : -1;

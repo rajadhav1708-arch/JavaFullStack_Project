@@ -95,6 +95,14 @@ export interface Product {
   isRecommended?: boolean;
 }
 
+export interface ProductCategoryMeta {
+  id: ProductCategory;
+  name: string;
+  description: string;
+  image: string;
+  productCount: number;
+}
+
 export interface CartItem {
   product: Product;
   weightKg: number;

@@ -10,9 +10,9 @@ import {
   NotificationItem,
   ShippingAddress,
   ProductCategory,
+  ProductCategoryMeta,
 } from '../types';
 import {
-  MOCK_PRODUCTS,
   MOCK_ORDERS,
   MOCK_KHATA_RECORDS,
   MOCK_SUBSCRIPTIONS,
@@ -33,6 +33,11 @@ interface AppContextType {
   
   products: Product[];
   setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  categories: ProductCategoryMeta[];
+  /** False on the first load, so screens can hold off showing an empty shop. */
+  isCatalogueLoading: boolean;
+  /** Set when the catalogue could not be loaded, so the UI can say why. */
+  catalogueError: string | null;
   selectedCategory: ProductCategory | 'All';
   setSelectedCategory: (cat: ProductCategory | 'All') => void;
   searchQuery: string;
@@ -90,22 +95,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentView, setCurrentView] = useState<MainView>('home');
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
   
-  const [products, setProducts] = useState<Product[]>(MOCK_PRODUCTS);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<ProductCategoryMeta[]>([]);
+  const [isCatalogueLoading, setIsCatalogueLoading] = useState(true);
+  const [catalogueError, setCatalogueError] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<ProductCategory | 'All'>('All');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
-  
-  const [cart, setCart] = useState<CartItem[]>(() => {
-    // default 1 item for quick demo
-    return [
-      {
-        product: MOCK_PRODUCTS[0],
-        weightKg: 50,
-        price: 1800,
-        quantity: 2,
-      },
-    ];
-  });
+
+  const [cart, setCart] = useState<CartItem[]>([]);
   
   const [wishlist, setWishlist] = useState<string[]>(['prod-1', 'prod-3']);
   const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
@@ -118,6 +116,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+
+  /**
+   * The catalogue is the first thing backed by a database, so it is fetched
+   * rather than bundled. Browsing still works with no account; only this read
+   * needs the API, and a failure is surfaced instead of showing an empty shop.
+   */
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function load(): Promise<void> {
+      try {
+        const [productsRes, categoriesRes] = await Promise.all([
+          fetch('/api/products', { signal: controller.signal }),
+          fetch('/api/categories', { signal: controller.signal }),
+        ]);
+
+        if (!productsRes.ok || !categoriesRes.ok) {
+          throw new Error(`Catalogue request failed (${productsRes.status}/${categoriesRes.status})`);
+        }
+
+        const productsData = (await productsRes.json()) as { products: Product[] };
+        const categoriesData = (await categoriesRes.json()) as { categories: ProductCategoryMeta[] };
+
+        setProducts(productsData.products);
+        setCategories(categoriesData.categories);
+        setCatalogueError(null);
+      } catch (error) {
+        // An aborted request is unmount cleanup, not a failure worth showing.
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        console.error('Could not load the catalogue:', error);
+        setCatalogueError(
+          'We could not load the product catalogue. Please check that the API is running and refresh.'
+        );
+      } finally {
+        if (!controller.signal.aborted) setIsCatalogueLoading(false);
+      }
+    }
+
+    void load();
+    return () => controller.abort();
+  }, []);
 
   const addToast = (text: string, type: ToastMessage['type'] = 'success') => {
     const id = Date.now().toString() + Math.random().toString(36).substring(2, 5);
@@ -367,6 +406,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setAdminTab,
         products,
         setProducts,
+        categories,
+        isCatalogueLoading,
+        catalogueError,
         selectedCategory,
         setSelectedCategory,
         searchQuery,

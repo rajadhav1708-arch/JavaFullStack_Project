@@ -112,7 +112,32 @@ Demo accounts created by `npm run db:seed`:
 | Role | Email | Password |
 | --- | --- | --- |
 | Shop admin | `admin@pashufeed.test` | `Admin@12345` |
+| Counter staff | `counter@pashufeed.test` | `Counter@12345` |
 | Dairy farmer | `farmer@pashufeed.test` | `Farmer@12345` |
+
+Counter staff see only Overview, Inventory, POS and Delivery. Revenue, Khata,
+farmer directory, suppliers, promos, reports and settings are owner-only.
+
+## Product catalogue
+
+Categories and products are read from the database at runtime, not bundled into
+the bundle. `server/seed/catalogue.ts` holds the one-time seed; the running app
+never imports it.
+
+- `categories`, `products` and `product_variants` tables, plus a
+  `default_weight_kg` column for the pack size shown first on a product page.
+- Pack sizes (25 kg, 50 kg, 500 kg) are their own rows with their own price and
+  stock, because a 25 kg bag and a 50 kg bag are not the same line item.
+- Money is `NUMERIC`, never a float, so totals cannot drift.
+- Category `productCount` is counted in SQL, so a category can never advertise
+  products it does not have.
+- `inStock` and the default pack size are derived from the variant rows at read
+  time, so they cannot go stale.
+- The catalogue is public. Only writes need a session, and those arrive with the
+  orders feature.
+
+To edit the catalogue, change the rows in the database (or
+`server/seed/catalogue.ts` and re-run `npm run db:seed` on a fresh database).
 
 ## Other commands
 
@@ -134,6 +159,9 @@ npm run db:seed  # upsert the demo accounts
 | `POST` | `/api/auth/login` | Sign in, sets the session cookie |
 | `POST` | `/api/auth/logout` | Clears the session cookie |
 | `GET` | `/api/auth/me` | The signed-in user, or 401 |
+| `GET` | `/api/products` | Catalogue; `?category=`, `?brand=`, `?q=` filters |
+| `GET` | `/api/products/:id` | One product by id or SKU |
+| `GET` | `/api/categories` | Categories with live product counts |
 | `POST` | `/api/chat` | Chat reply; returns `{ text, actionBtn? }` |
 
 `POST /api/chat` accepts `{ message, history, products, khataSummary }`. The
@@ -154,15 +182,20 @@ The API key is never sent to the browser.
 │   ├── schema.sql            Table definitions
 │   ├── migrate.ts            npm run db:init
 │   ├── seed.ts               npm run db:seed
+│   ├── seed/catalogue.ts     One-time catalogue seed
 │   ├── auth.ts               scrypt hashing, JWT, cookie helpers
-│   └── routes/auth.ts        register · login · logout · me
+│   └── routes/
+│       ├── auth.ts           register · login · logout · me
+│       └── products.ts       categories · products · product by id
 ├── src/
 │   ├── App.tsx               View router and sign-in gates
 │   ├── main.tsx
 │   ├── index.css             Tailwind entry plus keyframes
-│   ├── context/AppContext.tsx  Shop state (cart, orders, khata)
+│   ├── context/AppContext.tsx  Shop state (cart, orders, khata) plus the
+│   │                          catalogue fetched from the API
 │   ├── context/AuthContext.tsx Session state
-│   ├── data/mockData.ts      Seed catalogue, orders, ledger
+│   ├── data/mockData.ts      Sample orders, khata, subscriptions, reviews
+│   │                          (products and categories are now in the database)
 │   ├── types/index.ts
 │   └── components/
 │       ├── auth/             AuthModal
@@ -182,8 +215,9 @@ The API key is never sent to the browser.
 └── tsconfig.json
 ```
 
-Only the `users` table is persisted so far. Products, orders, the Khata ledger
-and analytics are still in-memory seed data from `src/data/mockData.ts`.
+Only `users` and the catalogue are persisted so far. Orders, the Khata ledger,
+subscriptions and analytics are still in-memory sample data from
+`src/data/mockData.ts`.
 
 ## Media assets
 

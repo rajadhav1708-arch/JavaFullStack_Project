@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory } from '../../types';
-import { PRODUCT_CATEGORIES } from '../../data/mockData';
 import {
   Plus,
   Search,
@@ -11,7 +10,7 @@ import {
 } from 'lucide-react';
 
 export const InventoryManagement: React.FC = () => {
-  const { products, setProducts, addToast } = useApp();
+  const { products, categories, setProducts, addToast } = useApp();
 
   const [search, setSearch] = useState('');
   const [selectedCat, setSelectedCat] = useState<string>('All');
@@ -158,7 +157,7 @@ export const InventoryManagement: React.FC = () => {
             className="bg-slate-50 border border-slate-200 text-xs font-bold rounded-xl px-3 py-2 outline-none w-full sm:w-auto"
           >
             <option value="All">All Categories</option>
-            {PRODUCT_CATEGORIES.map((c) => (
+            {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -260,7 +259,7 @@ export const InventoryManagement: React.FC = () => {
                     onChange={(e) => setNewProd({ ...newProd, category: e.target.value as any })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 outline-none font-bold"
                   >
-                    {PRODUCT_CATEGORIES.map((c) => (
+                    {categories.map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.name}
                       </option>

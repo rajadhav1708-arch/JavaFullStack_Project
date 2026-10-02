@@ -1,11 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { PRODUCT_CATEGORIES } from '../../data/mockData';
 import { ProductCategory } from '../../types';
 import { ArrowRight, Sparkles } from 'lucide-react';
 
 export const CategoryGrid: React.FC = () => {
-  const { setCurrentView, setSelectedCategory } = useApp();
+  const { setCurrentView, setSelectedCategory, categories, isCatalogueLoading } = useApp();
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollY, setScrollY] = useState(0);
 
@@ -37,7 +36,16 @@ export const CategoryGrid: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6" ref={containerRef}>
-          {PRODUCT_CATEGORIES.map((cat, index) => (
+          {/* Categories load from the API; show placeholders rather than a
+              collapsed grid that pops in a moment later. */}
+          {isCatalogueLoading &&
+            Array.from({ length: 8 }).map((_, index) => (
+              <div
+                key={`skeleton-${index}`}
+                className="h-64 rounded-2xl bg-white/5 border border-white/10 animate-pulse"
+              />
+            ))}
+          {categories.map((cat, index) => (
             <div
               key={cat.id}
               onClick={() => handleCategoryClick(cat.id)}

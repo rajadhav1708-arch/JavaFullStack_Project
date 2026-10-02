@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RationRecommendationInput, FeedRecommendationResult, Product } from '../../types';
-import { MOCK_PRODUCTS } from '../../data/mockData';
 import {
   Calculator,
   CheckCircle2,
@@ -13,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export const SmartRationQuiz: React.FC = () => {
-  const { addToCart, setCurrentView, setIsCartDrawerOpen } = useApp();
+  const { addToCart, setCurrentView, setIsCartDrawerOpen, products, addToast } = useApp();
 
   const [step, setStep] = useState<number>(1);
 
@@ -41,16 +40,30 @@ export const SmartRationQuiz: React.FC = () => {
   };
 
   const handleCalculateRation = () => {
-    // Calculate tailored feed bundle based on farmer answers
-    let primaryProduct: Product = MOCK_PRODUCTS[0]; // PashuPoshan Gold Pellets
-    if (formData.animalType === 'Buffalo') {
-      primaryProduct = MOCK_PRODUCTS[1]; // Murrah Special Buffalo Feed
-    } else if (formData.animalType === 'Calf') {
-      primaryProduct = MOCK_PRODUCTS[3]; // NutriCalf
-    }
+    // Products are looked up by SKU, never by array position: the catalogue now
+    // comes from the database, where row order is not something we control, so
+    // MOCK_PRODUCTS[3] style indexing could silently recommend the wrong feed.
+    const bySku = (sku: string): Product | undefined => products.find((p) => p.sku === sku);
 
-    const calciumProduct: Product = MOCK_PRODUCTS[2]; // Veer-Cal Liquid Calcium
-    const bypassFatProduct: Product = MOCK_PRODUCTS[4]; // Bypass Fat 99
+    const cowFeed = bySku('PP-GLD-50KG');
+    const buffaloFeed = bySku('DMX-BUF-50KG');
+    const calfFeed = bySku('PP-CLF-25KG');
+    const calciumProduct = bySku('VET-CAL-5L');
+    const bypassFatProduct = bySku('NRT-FAT-10KG');
+
+    // Required feeds are seeded rows, so this only guards against a catalogue
+    // edit removing one. Without it the quiz would throw on a missing product.
+    const primaryProduct =
+      formData.animalType === 'Buffalo'
+        ? buffaloFeed ?? cowFeed
+        : formData.animalType === 'Calf'
+          ? calfFeed ?? cowFeed
+          : cowFeed;
+
+    if (!primaryProduct || !calciumProduct || !bypassFatProduct) {
+      addToast('The ration quiz needs a few products to be in the catalogue.', 'error');
+      return;
+    }
 
     const isHighYield = formData.milkYieldLiters >= 15;
     const dailyRationKg = Math.max(3, Math.round(formData.milkYieldLiters * 0.4 + 1));

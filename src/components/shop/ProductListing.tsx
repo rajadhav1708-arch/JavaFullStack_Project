@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product } from '../../types';
-import { PRODUCT_CATEGORIES } from '../../data/mockData';
 import { RatingStars } from '../common/RatingStars';
 import {
   Search,
@@ -20,6 +19,9 @@ import {
 export const ProductListing: React.FC = () => {
   const {
     products,
+    categories,
+    isCatalogueLoading,
+    catalogueError,
     selectedCategory,
     setSelectedCategory,
     searchQuery,
@@ -92,6 +94,34 @@ export const ProductListing: React.FC = () => {
     setSearchQuery('');
   };
 
+  // The catalogue comes from the API, so distinguish "still loading" and "the
+  // database is unreachable" from a genuine "no products match" result.
+  if (isCatalogueLoading) {
+    return (
+      <div className="bg-transparent text-slate-100 min-h-screen py-8 relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center py-24">
+            <div className="inline-block w-8 h-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+            <p className="mt-4 text-sm text-slate-500">Loading the catalogue...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (catalogueError) {
+    return (
+      <div className="bg-transparent text-slate-100 min-h-screen py-8 relative z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center py-24 max-w-md mx-auto">
+            <p className="text-lg font-bold text-slate-900">Catalogue unavailable</p>
+            <p className="mt-2 text-sm text-slate-500">{catalogueError}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-transparent text-slate-100 min-h-screen py-8 relative z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -144,7 +174,7 @@ export const ProductListing: React.FC = () => {
           >
             All Feeds
           </button>
-          {PRODUCT_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat.id}
               onClick={() => setSelectedCategory(cat.id)}
