@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   ShoppingBag,
   Search,
@@ -18,12 +19,11 @@ import {
   ChevronDown,
   LayoutDashboard,
   Calculator,
+  LogOut,
 } from 'lucide-react';
 
 export const Header: React.FC = () => {
   const {
-    userRole,
-    setUserRole,
     currentView,
     setCurrentView,
     setAdminTab,
@@ -38,23 +38,35 @@ export const Header: React.FC = () => {
     markNotificationAsRead,
   } = useApp();
 
+  const { user, isLoading: isAuthLoading, openAuthModal, logout } = useAuth();
+
+  // Role is no longer switchable: it comes from the signed-in database record.
+  const userRole = user?.role ?? 'customer';
+  const isStaff = userRole === 'admin' || userRole === 'employee';
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
 
+  const roleLabel =
+    userRole === 'customer' ? 'Dairy Farmer' : userRole === 'admin' ? 'Shop Owner (Admin)' : 'Counter Staff';
+
   const handleRoleChange = (role: 'customer' | 'admin' | 'employee') => {
-    setUserRole(role);
     setIsRoleDropdownOpen(false);
     if (role === 'admin' || role === 'employee') {
       setCurrentView('admin-dashboard');
-      if (role === 'employee') {
-        setAdminTab('pos');
-      } else {
-        setAdminTab('overview');
-      }
+      setAdminTab(role === 'employee' ? 'pos' : 'overview');
     } else {
       setCurrentView('home');
     }
+  };
+
+  const handleStaffArea = () => {
+    if (!user) {
+      openAuthModal('Sign in with a staff account to open the shop dashboard.');
+      return;
+    }
+    handleRoleChange(userRole);
   };
 
   const handleSearchSubmit = (e: React.FormEvent) => {
@@ -83,62 +95,79 @@ export const Header: React.FC = () => {
             </span>
 
             {/* Quick Role Switcher Pill */}
-            <div className="relative">
+            {!isAuthLoading && !user ? (
               <button
-                onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                className="flex items-center gap-1.5 bg-[#065f46] hover:bg-[#044a36] text-white px-2.5 py-0.5 rounded-full font-medium transition-colors cursor-pointer"
+                onClick={() => openAuthModal()}
+                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-full font-bold text-xs transition-colors cursor-pointer"
               >
-                <ShieldCheck className="w-3 h-3 text-amber-300" />
-                <span>
-                  Role: {userRole === 'customer' ? 'Dairy Farmer' : userRole === 'admin' ? 'Shop Owner (Admin)' : 'Counter Staff'}
-                </span>
-                <ChevronDown className="w-3 h-3" />
+                <User className="w-3 h-3" />
+                <span>Sign in / Register</span>
               </button>
+            ) : !isAuthLoading && user ? (
+              <div className="relative">
+                <button
+                  onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                  className="flex items-center gap-1.5 bg-[#065f46] hover:bg-[#044a36] text-white px-2.5 py-0.5 rounded-full font-medium transition-colors cursor-pointer"
+                >
+                  <ShieldCheck className="w-3 h-3 text-amber-300" />
+                  <span className="max-w-[9rem] truncate">{user.name}</span>
+                  <span className="hidden sm:inline text-[#a7f3d0]">· {roleLabel}</span>
+                  <ChevronDown className="w-3 h-3" />
+                </button>
 
-              {isRoleDropdownOpen && (
-                <div className="absolute right-0 mt-1.5 w-56 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-200 py-2 z-50">
-                  <div className="px-3 py-1.5 border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                    Switch App Mode
+                {isRoleDropdownOpen && (
+                  <div className="absolute right-0 mt-1.5 w-64 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-200 py-2 z-50">
+                    <div className="px-3 py-2 border-b border-slate-100">
+                      <div className="text-sm font-black text-slate-900 truncate">{user.name}</div>
+                      <div className="text-[11px] text-slate-500 truncate">{user.email}</div>
+                      <div className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">
+                        {roleLabel}
+                      </div>
+                    </div>
+
+                    {isStaff && (
+                      <button
+                        onClick={() => handleStaffArea()}
+                        className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50"
+                      >
+                        <LayoutDashboard className="w-4 h-4 text-emerald-600" />
+                        <div>
+                          <div className="font-semibold">Shop Dashboard</div>
+                          <div className="text-[10px] text-slate-500">Analytics, Inventory, Khata, POS</div>
+                        </div>
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        setIsRoleDropdownOpen(false);
+                        setCurrentView('customer-dashboard');
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50"
+                    >
+                      <User className="w-4 h-4 text-emerald-600" />
+                      <div>
+                        <div className="font-semibold">My Account</div>
+                        <div className="text-[10px] text-slate-500">Orders, Khata balance, subscriptions</div>
+                      </div>
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        setIsRoleDropdownOpen(false);
+                        void logout();
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-red-50 text-red-700 border-t border-slate-100"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span className="font-semibold">Sign out</span>
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleRoleChange('customer')}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 ${
-                      userRole === 'customer' ? 'bg-emerald-50 font-bold text-emerald-800' : ''
-                    }`}
-                  >
-                    <User className="w-4 h-4 text-emerald-600" />
-                    <div>
-                      <div className="font-semibold">Dairy Farmer / Customer</div>
-                      <div className="text-[10px] text-slate-500">Shop, AI Ration, Orders, Khata</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleRoleChange('admin')}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 ${
-                      userRole === 'admin' ? 'bg-emerald-50 font-bold text-emerald-800' : ''
-                    }`}
-                  >
-                    <LayoutDashboard className="w-4 h-4 text-emerald-600" />
-                    <div>
-                      <div className="font-semibold">Shop Owner / SaaS Admin</div>
-                      <div className="text-[10px] text-slate-500">Analytics, Inventory, Khata CRM, Reports</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleRoleChange('employee')}
-                    className={`w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50 ${
-                      userRole === 'employee' ? 'bg-emerald-50 font-bold text-emerald-800' : ''
-                    }`}
-                  >
-                    <Store className="w-4 h-4 text-emerald-600" />
-                    <div>
-                      <div className="font-semibold">Shop Counter Staff</div>
-                      <div className="text-[10px] text-slate-500">POS Billing, Quick Inventory Search</div>
-                    </div>
-                  </button>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              <div className="w-24 h-6 bg-white/10 rounded-full animate-pulse" />
+            )}
           </div>
         </div>
       </div>
@@ -340,14 +369,20 @@ export const Header: React.FC = () => {
             {/* User Profile / Dashboard Button */}
             <button
               onClick={() => {
-                if (userRole === 'customer') {
-                  setCurrentView('customer-dashboard');
-                } else {
-                  setCurrentView('admin-dashboard');
+                if (!user) {
+                  openAuthModal('Sign in to see your orders, Khata balance and subscriptions.');
+                  return;
                 }
+                setCurrentView(userRole === 'customer' ? 'customer-dashboard' : 'admin-dashboard');
               }}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
-              title={userRole === 'customer' ? 'Customer Account' : 'Admin Portal'}
+              title={
+                !user
+                  ? 'Sign in'
+                  : userRole === 'customer'
+                    ? 'Customer Account'
+                    : 'Admin Portal'
+              }
             >
               <User className="w-5 h-5" />
             </button>

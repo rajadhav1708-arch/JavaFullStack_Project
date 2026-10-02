@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Product, CartItem } from '../../types';
+import { Product } from '../../types';
 import {
   Store,
   Search,

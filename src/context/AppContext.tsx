@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import {
-  UserRole,
   MainView,
   AdminTab,
   Product,
@@ -27,8 +26,6 @@ interface ToastMessage {
 }
 
 interface AppContextType {
-  userRole: UserRole;
-  setUserRole: (role: UserRole) => void;
   currentView: MainView;
   setCurrentView: (view: MainView) => void;
   adminTab: AdminTab;
@@ -90,7 +87,6 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [userRole, setUserRole] = useState<UserRole>('customer');
   const [currentView, setCurrentView] = useState<MainView>('home');
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
   
@@ -365,8 +361,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <AppContext.Provider
       value={{
-        userRole,
-        setUserRole,
         currentView,
         setCurrentView,
         adminTab,

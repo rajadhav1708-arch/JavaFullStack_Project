@@ -1,5 +1,14 @@
 export type UserRole = 'customer' | 'admin' | 'employee';
 
+/** The signed-in user as returned by GET /api/auth/me. Never carries the password hash. */
+export interface AuthUser {
+  id: number;
+  email: string;
+  name: string;
+  role: UserRole;
+  village: string | null;
+}
+
 export type MainView =
   | 'home'
   | 'shop'

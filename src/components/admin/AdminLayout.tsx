@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { AdminOverview } from './AdminOverview';
 import { SalesAnalytics } from './SalesAnalytics';
 import { InventoryManagement } from './InventoryManagement';
@@ -26,8 +27,32 @@ import {
   ChevronRight,
 } from 'lucide-react';
 
+/**
+ * Tabs each role may open. Counter staff handle billing and stock at the shop
+ * counter; the owner additionally sees revenue, credit, supplier and config
+ * records. Both lists are enforced again on the matching API routes.
+ */
+const STAFF_TABS = ['overview', 'inventory', 'pos', 'delivery'] as const;
+const ADMIN_TABS = [
+  'overview',
+  'analytics',
+  'inventory',
+  'pos',
+  'khata',
+  'crm',
+  'suppliers',
+  'delivery',
+  'offers',
+  'reports',
+  'settings',
+] as const;
+
 export const AdminLayout: React.FC = () => {
   const { adminTab, setAdminTab } = useApp();
+  const { user } = useAuth();
+
+  const isOwner = user?.role === 'admin';
+  const allowedTabs = isOwner ? ADMIN_TABS : STAFF_TABS;
 
   const menuItems = [
     { id: 'overview', label: 'Overview Dashboard', icon: LayoutDashboard },
@@ -41,7 +66,22 @@ export const AdminLayout: React.FC = () => {
     { id: 'offers', label: 'Promotions & Coupons', icon: Ticket },
     { id: 'reports', label: 'GST & Audit Reports', icon: FileText },
     { id: 'settings', label: 'Store Settings', icon: Settings },
-  ] as const;
+  ].filter((item) => (allowedTabs as readonly string[]).includes(item.id));
+
+  // Staff should never be left staring at a tab their role cannot open.
+  React.useEffect(() => {
+    if (!(allowedTabs as readonly string[]).includes(adminTab)) {
+      setAdminTab('overview');
+    }
+  }, [adminTab, allowedTabs, setAdminTab]);
+
+  const roleLabel = isOwner ? 'Shop Owner' : 'Counter Staff';
+  const initials = (user?.name ?? '?')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? '')
+    .join('');
 
   return (
     <div className="bg-[#fafaf9] min-h-screen py-6 sm:py-8">
@@ -93,11 +133,11 @@ export const AdminLayout: React.FC = () => {
             <div className="p-4 border-t border-[#065f46] mt-4">
               <div className="flex items-center gap-3 p-2 bg-[#065f46] rounded-xl">
                 <div className="w-7 h-7 bg-[#10b981] rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">
-                  RK
+                  {initials}
                 </div>
                 <div className="flex-1 overflow-hidden">
-                  <div className="text-xs font-semibold truncate text-white">Rajesh Kumar</div>
-                  <div className="text-[10px] text-[#34d399]">Shop Manager</div>
+                  <div className="text-xs font-semibold truncate text-white">{user?.name}</div>
+                  <div className="text-[10px] text-[#34d399]">{roleLabel}</div>
                 </div>
               </div>
             </div>

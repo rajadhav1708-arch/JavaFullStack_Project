@@ -1,14 +1,17 @@
 import express from 'express';
 import { GoogleGenAI } from '@google/genai';
-import dotenv from 'dotenv';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.env') });
+import './env';
+import { checkDb, isDbConfigured } from './db';
+import { authRouter } from './routes/auth';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const MODEL = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash';
-const API_KEY = process.env.GEMINI_API_KEY;
+
+// The value copied from .env.example is a non-empty string, so a plain truthiness
+// check would report AI as enabled and then fail every request. Treat the
+// placeholder as "not configured" so the chat falls back to demo mode cleanly.
+const RAW_API_KEY = process.env.GEMINI_API_KEY;
+const API_KEY = RAW_API_KEY && !RAW_API_KEY.startsWith('your-') ? RAW_API_KEY : undefined;
 
 const ALLOWED_VIEWS = [
   'shop',
@@ -105,6 +108,12 @@ app.get('/api/health', (_req, res) => {
   res.json({ ok: true, model: MODEL, aiEnabled: Boolean(API_KEY) });
 });
 
+app.get('/api/health/db', async (_req, res) => {
+  res.json({ db: await checkDb() });
+});
+
+app.use('/api/auth', authRouter);
+
 app.post('/api/chat', async (req, res) => {
   if (!API_KEY) {
     res.status(503).json({
@@ -169,5 +178,13 @@ app.listen(PORT, () => {
   console.log(`PashuFeed API listening on http://localhost:${PORT}`);
   if (!API_KEY) {
     console.warn('GEMINI_API_KEY missing - /api/chat will return 503 and the chat uses demo mode.');
+  }
+  if (!isDbConfigured) {
+    console.warn(
+      'DATABASE_URL missing - accounts are disabled and /api/auth returns 503. ' +
+        'The storefront, AI quiz and chatbot still work. See README for setup.'
+    );
+  } else if (!process.env.SESSION_SECRET) {
+    console.warn('SESSION_SECRET missing - set it in .env or login will fail.');
   }
 });

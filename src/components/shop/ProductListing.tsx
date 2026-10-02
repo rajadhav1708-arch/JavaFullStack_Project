@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { ProductCategory, Product } from '../../types';
+import { Product } from '../../types';
 import { PRODUCT_CATEGORIES } from '../../data/mockData';
 import { RatingStars } from '../common/RatingStars';
 import {
