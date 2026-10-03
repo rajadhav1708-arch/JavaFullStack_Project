@@ -17,6 +17,27 @@ ration guidance, and an AI nutrition advisor.
 | Auth | scrypt password hashing + JWT in an httpOnly cookie |
 | AI | Google Gemini via `@google/genai` |
 
+## Setup guide for a fresh machine
+
+1. Install Node.js 20+, Docker Desktop (running), and Git.
+2. Clone the repo, then: ```bash
+   npm install
+   cp .env.example .env   # Windows: Copy-Item .env.example .env
+   ```
+3. Open `.env` and fill in: `DATABASE_URL` (already set for Docker), `SESSION_SECRET` (any long string), `GEMINI_API_KEY` (from Google AI Studio).
+4. Start the database and load schema + demo data: ```bash
+   docker compose up -d
+   npm run db:init
+   npm run db:seed
+   ```
+5. Run everything: ```bash
+   npm run dev
+   ```
+   Vite on http://localhost:3000 , API on http://localhost:3001 .
+
+Demo logins: `admin@pashufeed.test` / `Admin@12345`, `farmer@pashufeed.test` / `Farmer@12345`.
+
+Parallax frames and the hero intake video are committed, so the page renders without regenerating anything.
 ## Requirements
 
 - Node.js 20 or newer
@@ -24,7 +45,7 @@ ration guidance, and an AI nutrition advisor.
 - A PostgreSQL database. Easiest option is Docker:
 
   ```bash
-  docker run -d --name pashufeed-db -e POSTGRES_PASSWORD=pashufeed -e POSTGRES_USER=postgres -e POSTGRES_DB=pashufeed -p 5432:5432 postgres:16-alpine
+  docker compose up -d
   ```
 
   A hosted Postgres works just as well (Neon, Supabase, Render). The connection
@@ -36,7 +57,7 @@ ration guidance, and an AI nutrition advisor.
 ```bash
 npm install
 cp .env.example .env    # then add DATABASE_URL, SESSION_SECRET and GEMINI_API_KEY
-npm run db:init          # create tables from server/schema.sql
+npm run db:init          # create tables from backend/server/schema.sql
 npm run db:seed          # create the demo admin and customer accounts
 ```
 
@@ -121,7 +142,7 @@ farmer directory, suppliers, promos, reports and settings are owner-only.
 ## Product catalogue
 
 Categories and products are read from the database at runtime, not bundled into
-the bundle. `server/seed/catalogue.ts` holds the one-time seed; the running app
+the bundle. `backend/server/seed/catalogue.ts` holds the one-time seed; the running app
 never imports it.
 
 - `categories`, `products` and `product_variants` tables, plus a
@@ -137,17 +158,38 @@ never imports it.
   orders feature.
 
 To edit the catalogue, change the rows in the database (or
-`server/seed/catalogue.ts` and re-run `npm run db:seed` on a fresh database).
+`backend/server/seed/catalogue.ts` and re-run `npm run db:seed` on a fresh database).
 
 ## Other commands
 
 ```bash
 npm run lint     # tsc --noEmit
-npm run build    # production bundle to dist/
+npm run build    # production bundle to frontend/dist/
 npm run preview  # serve the production bundle
-npm run db:init  # apply server/schema.sql (safe to re-run)
+npm run db:init  # apply backend/server/schema.sql (safe to re-run)
 npm run db:seed  # upsert the demo accounts
 ```
+
+## Regenerating the parallax background
+
+The landing background is a scroll-scrubbed image sequence drawn on one canvas,
+not a `<video>`. To rebuild it from a source clip you need
+[ffmpeg](https://ffmpeg.org/download.html) on your `PATH`
+(`winget install Gyan.FFmpeg` on Windows), then:
+
+```bash
+npm run frames -- path/to/cattle_farm.mp4
+```
+
+That writes 48 JPEGs at 1600px wide to `public/frames/cattle_frames_60fps/`.
+Frame count and width are set in `backend/server/extractFrames.ts` and must stay in step
+with `FRAME_COUNT` and `MAX_CANVAS_WIDTH` in
+`frontend/src/components/landing/ScrollAnimationBackground.tsx`.
+
+With no frames present the component draws a procedural particle background
+instead, so the app runs without this step. The frames currently committed are
+ffmpeg test patterns kept only to prove the pipeline - see the README.txt in that
+folder.
 
 ## API
 
@@ -162,6 +204,9 @@ npm run db:seed  # upsert the demo accounts
 | `GET` | `/api/products` | Catalogue; `?category=`, `?brand=`, `?q=` filters |
 | `GET` | `/api/products/:id` | One product by id or SKU |
 | `GET` | `/api/categories` | Categories with live product counts |
+| `GET` | `/api/orders` | Current user's orders (staff see all) |
+| `POST` | `/api/orders` | Place an order: server-side pricing, GST, stock decrement |
+| `PATCH` | `/api/orders/:id/status` | Update status (staff only) |
 | `POST` | `/api/chat` | Chat reply; returns `{ text, actionBtn? }` |
 
 `POST /api/chat` accepts `{ message, history, products, khataSummary }`. The
@@ -175,49 +220,20 @@ The API key is never sent to the browser.
 
 ```
 .
-├── server/
-│   ├── index.ts              Express app, Gemini chat route
-│   ├── env.ts                Loads .env once
-│   ├── db.ts                 pg Pool and query helper
-│   ├── schema.sql            Table definitions
-│   ├── migrate.ts            npm run db:init
-│   ├── seed.ts               npm run db:seed
-│   ├── seed/catalogue.ts     One-time catalogue seed
-│   ├── auth.ts               scrypt hashing, JWT, cookie helpers
-│   └── routes/
-│       ├── auth.ts           register · login · logout · me
-│       └── products.ts       categories · products · product by id
-├── src/
-│   ├── App.tsx               View router and sign-in gates
-│   ├── main.tsx
-│   ├── index.css             Tailwind entry plus keyframes
-│   ├── context/AppContext.tsx  Shop state (cart, orders, khata) plus the
-│   │                          catalogue fetched from the API
-│   ├── context/AuthContext.tsx Session state
-│   ├── data/mockData.ts      Sample orders, khata, subscriptions, reviews
-│   │                          (products and categories are now in the database)
-│   ├── types/index.ts
-│   └── components/
-│       ├── auth/             AuthModal
-│       ├── landing/          Hero, categories, featured, services, testimonials,
-│       │                     ScrollAnimationBackground (scroll-scrubbed video)
-│       ├── shop/             Listing, detail, cart, checkout, order tracking
-│       ├── admin/            Overview, analytics, inventory, POS, Khata, CRM,
-│       │                     suppliers, deliveries, offers, reports, settings
-│       ├── customer/         Customer dashboard
-│       ├── nutrition/        SmartRationQuiz
-│       ├── subscriptions/    SubscriptionManager
-│       ├── chat/             AIChatbotWidget
-│       ├── common/           RatingStars, ToastContainer
-│       └── layout/           Header, Footer
-├── index.html
-├── vite.config.ts
-└── tsconfig.json
+├── backend/
+│   └── server/             Express app, Gemini chat, orders, auth, schema.sql,
+│                           routes/, seed/, extractFrames.ts
+├── frontend/
+│   ├── index.html
+│   ├── vite.config.ts      (root: frontend/, proxies /api to :3001)
+│   ├── public/             frames/ + videos/cow_eating.mp4 (local drop-ins)
+│   └── src/                React app (components/, context/, hooks/, ...)
+├── index config files      package.json, tsconfig.json, docker-compose.yml, .env
 ```
 
 Only `users` and the catalogue are persisted so far. Orders, the Khata ledger,
 subscriptions and analytics are still in-memory sample data from
-`src/data/mockData.ts`.
+`frontend/src/data/mockData.ts`.
 
 ## Media assets
 
@@ -231,4 +247,4 @@ absent, so you can drop in your own footage without touching the code:
 If every video source fails, the background falls back to a canvas animation.
 
 Product and testimonial imagery loads from Unsplash CDN URLs defined in
-`src/data/mockData.ts`.
+`frontend/src/data/mockData.ts`.

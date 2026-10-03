@@ -5,13 +5,14 @@
   "description": "Cattle feed shop and farm management platform for dairy farmers and shop owners.",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n web,api -c cyan,green \"vite\" \"npm:server\"",
-    "server": "tsx watch server/index.ts",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "concurrently -n web,api -c cyan,green \"vite --config frontend/vite.config.ts\" \"npm:server\"",
+    "server": "tsx watch backend/server/index.ts",
+    "build": "vite build --config frontend/vite.config.ts",
+    "preview": "vite preview --config frontend/vite.config.ts",
     "lint": "tsc --noEmit",
-    "db:init": "tsx server/migrate.ts",
-    "db:seed": "tsx server/seed.ts"
+    "db:init": "tsx backend/server/migrate.ts",
+    "db:seed": "tsx backend/server/seed.ts",
+    "frames": "tsx backend/server/extractFrames.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",

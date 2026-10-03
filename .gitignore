@@ -15,3 +15,7 @@ Thumbs.db
 
 .vscode/
 .idea/
+
+# generated source clips (kept out of the repo; frames are committed)
+*.mp4
+!frontend/public/videos/cow_eating.mp4

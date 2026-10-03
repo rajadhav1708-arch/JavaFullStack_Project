@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+@keyframes scroll-vertical {
+  0% {
+    transform: translateY(0%);
+  }
+  100% {
+    transform: translateY(-50%);
+  }
+}
+
+@keyframes scroll-reverse {
+  0% {
+    transform: translateY(-50%);
+  }
+  100% {
+    transform: translateY(0%);
+  }
+}
+
+@keyframes spin-slow {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-scroll-vertical {
+  animation: scroll-vertical 25s linear infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.animate-scroll-vertical:hover {
+  animation-play-state: paused;
+}
+
+.animate-scroll-reverse {
+  animation: scroll-reverse 30s linear infinite;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+}
+
+.animate-scroll-reverse:hover {
+  animation-play-state: paused;
+}
+
+.animate-spin-slow {
+  animation: spin-slow 12s linear infinite;
+}
+
+/* Scroll reveal: panels start blurred and sunk, then ease in. The
+   IntersectionObserver in useRevealOnScroll adds .is-visible. */
+[data-reveal] {
+  opacity: 0;
+  transform: translate3d(0, 32px, 0);
+  filter: blur(6px);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    filter 0.7s ease;
+  will-change: opacity, transform, filter;
+}
+
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  filter: blur(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-reveal] {
+    opacity: 1;
+    transform: none;
+    filter: none;
+    transition: none;
+  }
+}
+
+/* Theme choices from My Account. `dark` is the default; dim and contrast are
+   device-level nudges, not a second stylesheet. */
+html.theme-dim body {
+  filter: brightness(0.86);
+}
+
+html.theme-contrast body {
+  filter: contrast(1.16) saturate(1.15);
+}
+
+/* Thin scroll progress line pinned to the very top of the viewport. */
+#scroll-progress-bar {
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  will-change: transform;
+}
+
+/* Hide scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+

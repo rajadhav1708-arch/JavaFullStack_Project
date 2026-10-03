@@ -1,0 +1,34 @@
+# Local PostgreSQL for development.
+#
+#   docker compose up -d      start
+#   docker compose down       stop (data survives in the named volume)
+#   docker compose down -v    stop and delete all data
+#
+# The credentials here are local development only and match the DATABASE_URL
+# already in .env. For anything real, point DATABASE_URL at a managed Postgres
+# (Neon, Supabase, Render) and nothing else changes.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: pashufeed-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pashufeed
+      POSTGRES_DB: pashufeed
+    ports:
+      - '5432:5432'
+    volumes:
+      # Named volume, so `down` does not throw away the seeded catalogue.
+      - pashufeed_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` alone reports ok while Postgres is still replaying WAL on a
+      # fresh volume, which makes db:seed fail on the very first run.
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d pashufeed']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pashufeed_pgdata:
