@@ -21,7 +21,8 @@ export type MainView =
   | 'order-tracking'
   | 'customer-dashboard'
   | 'admin-dashboard'
-  | 'account';
+  | 'account'
+  | 'login';
 
 export type AdminTab =
   | 'overview'

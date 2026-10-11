@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
+import { useNavigate } from 'react-router-dom';
 import {
   ShoppingBag,
   Search,
@@ -37,10 +38,10 @@ export const Header: React.FC = () => {
     markNotificationAsRead,
   } = useApp();
 
-  const { user, isLoading: isAuthLoading, openAuthModal, logout } = useAuth();
+  const { user, isLoading: isAuthLoading, redirectToLogin, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
+  const navigate = useNavigate();
 
-  // Role is no longer switchable: it comes from the signed-in database record.
   const userRole = user?.role ?? 'customer';
   const isStaff = userRole === 'admin' || userRole === 'employee';
 
@@ -54,16 +55,16 @@ export const Header: React.FC = () => {
   const handleRoleChange = (role: 'customer' | 'admin' | 'employee') => {
     setIsRoleDropdownOpen(false);
     if (role === 'admin' || role === 'employee') {
-      setCurrentView('admin-dashboard');
+      navigate('/admin-dashboard');
       setAdminTab(role === 'employee' ? 'pos' : 'overview');
     } else {
-      setCurrentView('home');
+      navigate('/home');
     }
   };
 
   const handleStaffArea = () => {
     if (!user) {
-      openAuthModal('Sign in with a staff account to open the shop dashboard.');
+      redirectToLogin();
       return;
     }
     handleRoleChange(userRole);
@@ -72,8 +73,13 @@ export const Header: React.FC = () => {
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {
-      setCurrentView('shop');
+      navigate('/shop');
     }
+  };
+
+  const goToView = (path: string) => {
+    navigate(path);
+    setIsMobileMenuOpen(false);
   };
 
   return (
@@ -112,7 +118,7 @@ export const Header: React.FC = () => {
             {/* Quick Role Switcher Pill */}
             {!isAuthLoading && !user ? (
               <button
-                onClick={() => openAuthModal()}
+                onClick={() => redirectToLogin()}
                 className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-full font-bold text-xs transition-colors cursor-pointer"
               >
                 <User className="w-3 h-3" />
@@ -156,7 +162,7 @@ export const Header: React.FC = () => {
                     <button
                       onClick={() => {
                         setIsRoleDropdownOpen(false);
-                        setCurrentView('account');
+                        navigate('/account');
                       }}
                       className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50"
                     >
@@ -193,8 +199,8 @@ export const Header: React.FC = () => {
           {/* Logo */}
           <div
             onClick={() => {
-              if (userRole === 'customer') setCurrentView('home');
-              else setCurrentView('admin-dashboard');
+              if (userRole === 'customer') navigate('/home');
+              else navigate('/admin-dashboard');
             }}
             className="flex items-center gap-3 cursor-pointer group"
           >
@@ -235,7 +241,7 @@ export const Header: React.FC = () => {
           {userRole === 'customer' ? (
             <nav className="hidden lg:flex items-center gap-6">
               <button
-                onClick={() => setCurrentView('home')}
+                onClick={() => navigate('/home')}
                 className={`text-sm font-semibold transition-colors ${
                   currentView === 'home' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
                 }`}
@@ -243,7 +249,7 @@ export const Header: React.FC = () => {
                 {t('nav.home')}
               </button>
               <button
-                onClick={() => setCurrentView('shop')}
+                onClick={() => navigate('/shop')}
                 className={`text-sm font-semibold transition-colors ${
                   currentView === 'shop' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
                 }`}
@@ -251,7 +257,7 @@ export const Header: React.FC = () => {
                 {t('nav.shop')}
               </button>
               <button
-                onClick={() => setCurrentView('nutrition-quiz')}
+                onClick={() => navigate('/nutrition-quiz')}
                 className={`text-sm font-semibold flex items-center gap-1.5 transition-colors ${
                   currentView === 'nutrition-quiz'
                     ? 'text-[#34d399] border-b-2 border-[#34d399] py-1'
@@ -262,7 +268,7 @@ export const Header: React.FC = () => {
                 {t('nav.quiz')}
               </button>
               <button
-                onClick={() => setCurrentView('subscriptions')}
+                onClick={() => navigate('/subscriptions')}
                 className={`text-sm font-semibold flex items-center gap-1 transition-colors ${
                   currentView === 'subscriptions'
                     ? 'text-[#34d399] border-b-2 border-[#34d399] py-1'
@@ -273,7 +279,7 @@ export const Header: React.FC = () => {
                 {t('nav.subscriptions')}
               </button>
               <button
-                onClick={() => setCurrentView('services')}
+                onClick={() => navigate('/services')}
                 className={`text-sm font-semibold transition-colors ${
                   currentView === 'services' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
                 }`}
@@ -281,7 +287,7 @@ export const Header: React.FC = () => {
                 {t('nav.services')}
               </button>
               <button
-                onClick={() => setCurrentView('offers')}
+                onClick={() => navigate('/offers')}
                 className={`text-sm font-semibold flex items-center gap-1 transition-colors ${
                   currentView === 'offers' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
                 }`}
@@ -345,7 +351,7 @@ export const Header: React.FC = () => {
             {/* Wishlist Button */}
             {userRole === 'customer' && (
               <button
-                onClick={() => setCurrentView('customer-dashboard')}
+                onClick={() => navigate('/customer-dashboard')}
                 className="hidden sm:flex p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl relative transition-colors cursor-pointer"
                 title="Wishlist"
               >
@@ -378,10 +384,10 @@ export const Header: React.FC = () => {
             <button
               onClick={() => {
                 if (!user) {
-                  openAuthModal('Sign in to see your orders, Khata balance and subscriptions.');
+                  redirectToLogin();
                   return;
                 }
-                setCurrentView(userRole === 'customer' ? 'customer-dashboard' : 'admin-dashboard');
+                navigate(userRole === 'customer' ? '/customer-dashboard' : '/admin-dashboard');
               }}
               className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
               title={
@@ -423,55 +429,37 @@ export const Header: React.FC = () => {
           {userRole === 'customer' ? (
             <div className="grid grid-cols-2 gap-2 text-sm font-semibold pt-2">
               <button
-                onClick={() => {
-                  setCurrentView('home');
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => goToView('/home')}
                 className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
               >
                 🏠 {t('nav.home')}
               </button>
               <button
-                onClick={() => {
-                  setCurrentView('shop');
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => goToView('/shop')}
                 className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
               >
                 🌾 {t('nav.shop')}
               </button>
               <button
-                onClick={() => {
-                  setCurrentView('nutrition-quiz');
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => goToView('/nutrition-quiz')}
                 className="p-2.5 text-left rounded-lg bg-emerald-50 text-emerald-800"
               >
                 🧮 {t('nav.quiz')}
               </button>
               <button
-                onClick={() => {
-                  setCurrentView('subscriptions');
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => goToView('/subscriptions')}
                 className="p-2.5 text-left rounded-lg bg-amber-50 text-amber-900"
               >
                 🔄 {t('nav.subscriptions')}
               </button>
               <button
-                onClick={() => {
-                  setCurrentView('customer-dashboard');
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => goToView('/customer-dashboard')}
                 className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
               >
                 👤 My Account / Khata
               </button>
               <button
-                onClick={() => {
-                  setCurrentView('offers');
-                  setIsMobileMenuOpen(false);
-                }}
+                onClick={() => goToView('/offers')}
                 className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
               >
                 🏷️ {t('nav.offers')}
@@ -481,7 +469,7 @@ export const Header: React.FC = () => {
             <div className="pt-2">
               <button
                 onClick={() => {
-                  setCurrentView('admin-dashboard');
+                  navigate('/admin-dashboard');
                   setIsMobileMenuOpen(false);
                 }}
                 className="w-full p-3 bg-emerald-800 text-white font-bold rounded-xl text-center"

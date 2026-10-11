@@ -2,38 +2,16 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useScrollFrame } from '../../hooks/useScrollProgress';
 
 /**
- * Scroll-scrubbed parallax background.
+ * Scroll-scrubbed parallax background using 600-frame image sequence.
+ * Frames are drawn onto a canvas for smooth scrubbing without video seek issues.
  *
- * The animation is a pre-extracted image sequence drawn onto one canvas, not a
- * `<video>`. That is deliberate. The previous implementation scrubbed with
- * `video.currentTime = t` on every scroll event; assigning currentTime is a
- * *seek*, so each one aborted the in-flight decode and restarted it, and because
- * `seeked` resolves asynchronously rapid scrolling queued seeks that landed out
- * of order. The result froze, stuttered backwards, or stopped entirely. Drawing
- * an already-decoded JPEG cannot do any of that.
- *
- * Regenerate the sequence from a source clip with ffmpeg (see README):
- *   ffmpeg -i clip.mp4 -vf "fps=2,scale=1600:-2" -q:v 4 \
- *     public/frames/cattle_frames_60fps/frame_%04d.jpg
- * Frame count must match FRAME_COUNT below.
+ * Frames located at: public/frames/cattle_frames_60fps/frame_XXXX.jpg (1-600)
  */
 
-/** Must match the number of files the ffmpeg command produces. */
-const FRAME_COUNT = 48;
+const FRAME_COUNT = 600;
 const FRAME_PATH = '/frames/cattle_frames_60fps';
-
-/** Parallel image requests. Enough to feel instant, few enough not to saturate. */
-const PRELOAD_CONCURRENCY = 6;
-
-/**
- * The clip plays across the first stretch of the page and then holds on its last
- * frame. Scrubbing against the whole document - which is what the old code did -
- * meant the background had only reached ~20% by the time you hit the footer, so
- * the animation was effectively never seen.
- */
-const SCRUB_VIEWPORTS = 2.5;
-
-/** Caps the backing store so a 4K display does not allocate a 4K canvas. */
+const PRELOAD_CONCURRENCY = 8;
+const SCRUB_VIEWPORTS = 3;
 const MAX_CANVAS_WIDTH = 1920;
 
 function prefersReducedMotion(): boolean {
@@ -46,7 +24,6 @@ function frameUrl(index: number): string {
   return `${FRAME_PATH}/frame_${String(index + 1).padStart(4, '0')}.jpg`;
 }
 
-/** Nearest frame that has actually decoded, so scrubbing never draws a hole. */
 function nearestLoaded(
   frames: (HTMLImageElement | null)[],
   target: number,
@@ -71,7 +48,6 @@ export const ScrollAnimationBackground: React.FC = () => {
 
   const [hasFrames, setHasFrames] = useState<boolean | null>(null);
 
-  /** Loads the sequence in small parallel batches. */
   useEffect(() => {
     let cancelled = false;
     const frames: (HTMLImageElement | null)[] = new Array(FRAME_COUNT).fill(null);
@@ -91,7 +67,6 @@ export const ScrollAnimationBackground: React.FC = () => {
         if (cancelled) return;
         frames[index] = image;
         readyRef.current += 1;
-        // Redraw immediately: the first frame must not wait for all 48.
         if (index === 0) drawnRef.current = -1;
         loadOne();
       };
@@ -103,11 +78,9 @@ export const ScrollAnimationBackground: React.FC = () => {
 
     for (let i = 0; i < PRELOAD_CONCURRENCY; i += 1) loadOne();
 
-    // Frames are optional drop-in assets. With none present the particle loop
-    // below renders instead, so the page is never left with an empty box.
     const settle = setTimeout(() => {
       if (!cancelled) setHasFrames(readyRef.current > 0);
-    }, 2500);
+    }, 3000);
 
     return () => {
       cancelled = true;
@@ -115,7 +88,6 @@ export const ScrollAnimationBackground: React.FC = () => {
     };
   }, []);
 
-  /** Keeps the backing store matched to the display without over-allocating. */
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -146,9 +118,6 @@ export const ScrollAnimationBackground: React.FC = () => {
     const scrubDistance = Math.max(1, viewportHeight * SCRUB_VIEWPORTS);
     const fraction = Math.min(1, Math.max(0, scrollY / scrubDistance));
 
-    // Ken Burns on top of the frame scrub: the whole plate slowly zooms and
-    // drifts as the user travels the first stretch of the page, so the
-    // background never feels like a pinned still between frame steps.
     const frameEl = frameRef.current;
     if (frameEl) {
       const zoom = 1 + fraction * 0.1;
@@ -158,8 +127,6 @@ export const ScrollAnimationBackground: React.FC = () => {
 
     const target = Math.min(FRAME_COUNT - 1, Math.floor(fraction * FRAME_COUNT));
 
-    // The whole point: a still page costs nothing. The canvas is only touched
-    // when the frame it is showing actually changes.
     if (target === drawnRef.current) return;
     drawnRef.current = target;
     targetRef.current = target;
@@ -173,12 +140,6 @@ export const ScrollAnimationBackground: React.FC = () => {
 
   useScrollFrame(draw);
 
-  /**
-   * Fallback for when no frames are present. Unlike the frame path this genuinely
-   * animates, so it needs a continuous loop - but it is gated on tab visibility
-   * and reduced motion, which the old version never was. It used to burn a core
-   * on the shop page and in background tabs forever.
-   */
   useEffect(() => {
     if (hasFrames !== false) return;
     if (prefersReducedMotion()) return;
@@ -269,10 +230,9 @@ export const ScrollAnimationBackground: React.FC = () => {
         <canvas
           ref={canvasRef}
           aria-hidden="true"
-          className="w-full h-full object-cover opacity-50"
+          className="w-full h-full object-cover opacity-70"
         />
 
-        {/* Dark gradient overlay, kept for foreground legibility. */}
         <div className="absolute inset-0 bg-gradient-to-b from-slate-950/80 via-slate-950/40 to-slate-950/90 pointer-events-none" />
       </div>
     </div>

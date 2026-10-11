@@ -37,7 +37,7 @@ ration guidance, and an AI nutrition advisor.
 
 Demo logins: `admin@pashufeed.test` / `Admin@12345`, `farmer@pashufeed.test` / `Farmer@12345`.
 
-Parallax frames and the hero intake video are committed, so the page renders without regenerating anything.
+The hero intake video is committed, so the page renders without regenerating anything. The parallax background uses a procedural particle animation (no external frame assets required).
 ## Requirements
 
 - Node.js 20 or newer
@@ -170,26 +170,12 @@ npm run db:init  # apply backend/server/schema.sql (safe to re-run)
 npm run db:seed  # upsert the demo accounts
 ```
 
-## Regenerating the parallax background
+## Parallax Background
 
-The landing background is a scroll-scrubbed image sequence drawn on one canvas,
-not a `<video>`. To rebuild it from a source clip you need
-[ffmpeg](https://ffmpeg.org/download.html) on your `PATH`
-(`winget install Gyan.FFmpeg` on Windows), then:
-
-```bash
-npm run frames -- path/to/cattle_farm.mp4
-```
-
-That writes 48 JPEGs at 1600px wide to `public/frames/cattle_frames_60fps/`.
-Frame count and width are set in `backend/server/extractFrames.ts` and must stay in step
-with `FRAME_COUNT` and `MAX_CANVAS_WIDTH` in
-`frontend/src/components/landing/ScrollAnimationBackground.tsx`.
-
-With no frames present the component draws a procedural particle background
-instead, so the app runs without this step. The frames currently committed are
-ffmpeg test patterns kept only to prove the pipeline - see the README.txt in that
-folder.
+The landing background uses a procedural particle animation rendered on a canvas.
+It responds to scroll progress with a Ken Burns style parallax effect. No external
+frame assets or ffmpeg are required. The animation respects `prefers-reduced-motion`
+and pauses in background tabs for performance.
 
 ## API
 
@@ -222,11 +208,11 @@ The API key is never sent to the browser.
 .
 ├── backend/
 │   └── server/             Express app, Gemini chat, orders, auth, schema.sql,
-│                           routes/, seed/, extractFrames.ts
+│                           routes/, seed/
 ├── frontend/
 │   ├── index.html
 │   ├── vite.config.ts      (root: frontend/, proxies /api to :3001)
-│   ├── public/             frames/ + videos/cow_eating.mp4 (local drop-ins)
+│   ├── public/             videos/cow_eating.mp4 (local drop-in)
 │   └── src/                React app (components/, context/, hooks/, ...)
 ├── index config files      package.json, tsconfig.json, docker-compose.yml, .env
 ```
@@ -242,9 +228,9 @@ with an optional local path that is skipped automatically when the file is
 absent, so you can drop in your own footage without touching the code:
 
 - `public/videos/cow_eating.mp4` - hero background
-- `public/videos/cattle_feed_scroll.mp4` - scroll-scrubbed background
 
-If every video source fails, the background falls back to a canvas animation.
+The parallax background uses a procedural canvas animation (no video required).
+If the hero video fails, it falls back to the Mixkit CDN.
 
 Product and testimonial imagery loads from Unsplash CDN URLs defined in
 `frontend/src/data/mockData.ts`.

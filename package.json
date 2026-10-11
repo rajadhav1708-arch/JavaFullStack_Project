@@ -11,18 +11,19 @@
     "preview": "vite preview --config frontend/vite.config.ts",
     "lint": "tsc --noEmit",
     "db:init": "tsx backend/server/migrate.ts",
-    "db:seed": "tsx backend/server/seed.ts",
-    "frames": "tsx backend/server/extractFrames.ts"
+    "db:seed": "tsx backend/server/seed.ts"
   },
   "dependencies": {
     "@google/genai": "^2.16.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "framer-motion": "^14.0.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.546.0",
     "pg": "^8.23.1",
     "react": "^19.0.1",
-    "react-dom": "^19.0.1"
+    "react-dom": "^19.0.1",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",

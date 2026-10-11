@@ -303,8 +303,8 @@ app.post('/api/chat', async (req, res) => {
       error: status === 429 ? 'AI_RATE_LIMITED' : 'UPSTREAM_ERROR',
       message:
         status === 429
-          ? 'Dr. Pashu AI is taking a short break (quota limit). Please try again later.'
-          : 'The AI advisor is temporarily unavailable. Please try again.',
+          ? 'Dr. Pashu is temporarily busy with high demand. Please try again in a moment.'
+          : 'Dr. Pashu is momentarily unavailable. Please try again shortly.',
     });
   }
 });

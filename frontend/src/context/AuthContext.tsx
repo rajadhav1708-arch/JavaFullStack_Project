@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { AuthUser } from '../types';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -20,6 +21,8 @@ interface AuthContextType {
   /** Opens the login dialog from anywhere that needs a signed-in user. */
   openAuthModal: (reason?: string) => void;
   closeAuthModal: () => void;
+  /** Redirect to login page with return path. */
+  redirectToLogin: (reason?: string) => void;
   isAuthModalOpen: boolean;
   authModalReason: string;
 }
@@ -59,7 +62,10 @@ async function postAuth(path: string, body: unknown): Promise<{ user: AuthUser }
   return { user: payload.user as AuthUser };
 }
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUnavailable, setIsUnavailable] = useState(false);
@@ -100,6 +106,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsAuthModalOpen(false);
     setAuthModalReason('');
   }, []);
+
+  const redirectToLogin = useCallback((reason = '') => {
+    const from = location.pathname + location.search;
+    navigate('/login', { state: { from, reason }, replace: true });
+  }, [navigate, location]);
 
   const login = useCallback(async (email: string, password: string) => {
     const result = await postAuth('/login', { email, password });
@@ -146,14 +157,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       updateUser: (u) => setUser(u),
       openAuthModal,
       closeAuthModal,
+      redirectToLogin,
       isAuthModalOpen,
       authModalReason,
     }),
-    [user, isLoading, isUnavailable, login, register, logout, openAuthModal, closeAuthModal, isAuthModalOpen, authModalReason]
+    [user, isLoading, isUnavailable, login, register, logout, openAuthModal, closeAuthModal, redirectToLogin, isAuthModalOpen, authModalReason]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+export const AuthProviderWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <AuthProvider>{children}</AuthProvider>
+);
 
 export function useAuth(): AuthContextType {
   const context = useContext(AuthContext);

@@ -18,8 +18,17 @@ interface ChatApiReply {
 /**
  * Canned answers used only when the Gemini backend is unreachable, so the widget
  * stays demonstrable without an API key. Surfaced to the user as "demo mode".
+ * These mimic a veterinary doctor's responses.
  */
 const DEMO_REPLIES: { match: RegExp; text: string; actionBtn?: ChatMessage['actionBtn'] }[] = [
+  {
+    match: /^(hi|hello|hey|namaste|good morning|good evening|good afternoon)/i,
+    text: 'Namaste! I am Dr. Pashu, your veterinary & dairy nutrition advisor. How can I help with your cattle health or feed today?',
+  },
+  {
+    match: /who (am i|are you)/i,
+    text: 'I am Dr. Pashu, a licensed veterinary and dairy-nutrition doctor for Indian dairy farmers. You are a valued farmer using PashuFeed Pro. How can I assist with your herd today?',
+  },
   {
     match: /fat|snf/i,
     text: 'Dr. Advice: To push milk fat percentage above 4.5%, feed bypass fat at 100-150 g/day alongside your high-protein pellet. Bypass fat passes the rumen intact, so more of it reaches the udder for fat synthesis.',
@@ -35,8 +44,24 @@ const DEMO_REPLIES: { match: RegExp; text: string; actionBtn?: ChatMessage['acti
     actionBtn: { label: 'View Khata Ledger', view: 'customer-dashboard' },
   },
   {
+    match: /vomit|vomited|vomiting|diarrhea|scours|loose motion|not eating|off feed|fever|lameness|limp|bloat|choking|milk fever|downer|mastitis|swollen udder/i,
+    text: 'Dr. Advice: This sounds concerning. For vomiting/off-feed: check for bloat, acidosis, or hardware disease. For diarrhea in adults: could be parasites, Johne\'s, or sudden diet change. For calves with scours: electrolytes immediately. For mastitis: strip quarter, apply teat dip, consider intramammary tube. For bloat: emergency - call local vet now. For milk fever/downer cow: calcium borogluconate IV immediately. Always confirm with a local veterinarian for exact diagnosis and drug doses.',
+  },
+  {
+    match: /pregnant|pregnancy|heat|ai|artificial insemination|breeding|repeat breeder/i,
+    text: 'Dr. Advice: For repeat breeders: check body condition score (target 3.0-3.5), ensure proper mineral mix with selenium, zinc, copper. Time AI at 12-18h after standing heat. Consider GnRH at AI. For pregnancy diagnosis: rectal palpation at 35-45 days or ultrasound at 28-32 days. Feed transition diet 3 weeks pre-calving with anionic salts to prevent milk fever.',
+  },
+  {
+    match: /deworm|worm|parasite|lice|tick|fly/i,
+    text: 'Dr. Advice: Deworm adults 2-3 times yearly (pre-monsoon, post-monsoon, pre-winter). Use fenbendazole or albendazole for roundworms, closantel for liver fluke. Calves: first deworming at 2-3 weeks, repeat at 6 weeks. Rotate drug classes to prevent resistance. For ectoparasites: deltamethrin pour-on or amitraz dip every 21 days in peak season.',
+  },
+  {
+    match: /weather|temperature|rain|humidity/i,
+    text: 'Dr. Advice: Hot weather reduces dry matter intake and milk yield. Ensure shade, fans, sprinklers, and clean water. Feed early morning and late evening. Add electrolytes and buffers (sodium bicarbonate 150g/day). Monsoon: watch for foot rot, mastitis spikes, and aflatoxin in wet feed. Keep feed dry and off ground.',
+  },
+  {
     match: /.*/,
-    text: 'Dr. Advice: For steady milk yield without risking rumen acidosis, hold a 60:40 forage-to-concentrate ratio and supplement with ionic calcium and bypass fat.',
+    text: 'Dr. Advice: For steady milk yield without risking rumen acidosis, hold a 60:40 forage-to-concentrate ratio and supplement with ionic calcium and bypass fat. For any specific health concern, describe the symptoms clearly - species, age, duration, temperature if known - and I will guide you on likely causes and first steps.',
   },
 ];
 
@@ -186,7 +211,7 @@ export const AIChatbotWidget: React.FC = () => {
           sender: 'ai',
           text: offline
             ? demo.text
-            : `Dr. Advice: I could not reach the AI service just now, so here is a standard answer. ${demo.text}`,
+            : `Dr. Advice: Connection issue. Let me help based on general veterinary knowledge. ${demo.text}`,
           actionBtn: demo.actionBtn,
         },
       ]);
