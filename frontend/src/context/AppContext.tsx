@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useCallback, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 import {
   MainView,
@@ -95,7 +96,8 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
-  const [currentView, setCurrentView] = useState<MainView>('home');
+  const navigate = useNavigate();
+  const [currentView, setCurrentViewState] = useState<MainView>('home');
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
   
   const [products, setProducts] = useState<Product[]>([]);
@@ -119,6 +121,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+
+  /**
+   * Legacy view-switcher bridge (router migration): dozens of components still
+   * call setCurrentView('shop') etc. from the pre-router era. Update the state
+   * AND navigate so the URL (which is what Routes renders) follows. The
+   * pathname guard prevents pushing a duplicate history entry when the sync
+   * effect in routes.tsx echoes a location change back into state.
+   */
+  const VIEW_TO_PATH: Record<MainView, string | null> = {
+    home: '/home',
+    shop: '/shop',
+    'nutrition-quiz': '/nutrition-quiz',
+    services: '/services',
+    subscriptions: '/subscriptions',
+    offers: '/offers',
+    cart: null, // no route: opens the cart drawer instead
+    checkout: '/checkout',
+    'order-tracking': '/order-tracking',
+    'customer-dashboard': '/customer-dashboard',
+    'admin-dashboard': '/admin-dashboard',
+    account: '/account',
+    login: '/login',
+  };
+
+  const setCurrentView = useCallback(
+    (view: MainView) => {
+      setCurrentViewState(view);
+      const path = VIEW_TO_PATH[view];
+      if (path) {
+        if (window.location.pathname !== path) navigate(path);
+      } else if (view === 'cart') {
+        setIsCartDrawerOpen(true);
+      }
+    },
+    [navigate]
+  );
 
   /**
    * The catalogue is the first thing backed by a database, so it is fetched

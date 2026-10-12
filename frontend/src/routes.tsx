@@ -89,9 +89,32 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; staffOnly?: boolean 
   return <>{children}</>;
 };
 
+const PATH_TO_VIEW: Record<string, MainView> = {
+  '/home': 'home',
+  '/shop': 'shop',
+  '/nutrition-quiz': 'nutrition-quiz',
+  '/services': 'services',
+  '/offers': 'offers',
+  '/checkout': 'checkout',
+  '/order-tracking': 'order-tracking',
+  '/customer-dashboard': 'customer-dashboard',
+  '/subscriptions': 'subscriptions',
+  '/admin-dashboard': 'admin-dashboard',
+  '/account': 'account',
+  '/login': 'login',
+};
+
 const MainRoutes: React.FC = () => {
-  const { currentView, setCurrentView } = useApp();
+  const { setCurrentView } = useApp();
   const { user, isAuthModalOpen, openAuthModal } = useAuth();
+  const location = useLocation();
+
+  // Keep the legacy currentView state (header highlight) in sync with the URL,
+  // which is the source of truth for what Routes renders.
+  React.useEffect(() => {
+    const view = PATH_TO_VIEW[location.pathname];
+    if (view) setCurrentView(view);
+  }, [location.pathname, setCurrentView]);
 
   useRevealOnScroll();
 
@@ -130,7 +153,7 @@ const MainRoutes: React.FC = () => {
 
       <main className="flex-1">
         <AnimatePresence mode="wait">
-          <Routes location={window.location.pathname}>
+          <Routes location={location}>
             <Route path="/login" element={<PageWrapper><LoginPage /></PageWrapper>} />
             <Route path="/home" element={
               <PageWrapper>
