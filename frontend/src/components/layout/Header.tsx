@@ -209,7 +209,7 @@ export const Header: React.FC = () => {
             </div>
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-lg text-white tracking-tight">AgroFeed Pro</span>
+                <span className="font-bold text-lg text-white tracking-tight">Hindavi Tradors</span>
               </div>
               <p className="text-[10px] font-medium text-slate-300 hidden sm:block">
                 Cattle Feed & Farm Inventory Hub

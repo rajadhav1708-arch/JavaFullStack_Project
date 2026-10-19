@@ -83,6 +83,22 @@ CREATE INDEX IF NOT EXISTS product_variants_product_idx ON product_variants (pro
 -- databases that were created by an earlier version of this file.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS default_weight_kg NUMERIC(8, 2);
 
+-- Hardware, sprayers, wire, pipe fittings and milking machinery joined the
+-- catalogue, so a pack size is no longer always a weight: `weight_kg` is now
+-- only the numeric identity of a variant (a sprayer is 1, a coil of wire is
+-- 25) and `unit` is what the label says. The column is not renamed because it
+-- already carried litres and bale counts before this change.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'kg';
+ALTER TABLE product_variants ADD COLUMN IF NOT EXISTS unit TEXT NOT NULL DEFAULT 'kg';
+
+-- Descriptive tags for non-consumables. `suitable_for` stays animal-only, so
+-- hardware gets an empty array plus tags rather than falsely claiming to be
+-- for a cow.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
+
+-- The three feature bullets a product card shows above the price.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS highlights TEXT[] NOT NULL DEFAULT '{}';
+
 -- ------------------------------------------------------------------- orders --
 CREATE TABLE IF NOT EXISTS orders (
   id              SERIAL PRIMARY KEY,
@@ -115,6 +131,9 @@ CREATE TABLE IF NOT EXISTS order_items (
   product_name TEXT NOT NULL,
   brand       TEXT NOT NULL,
   weight_kg   NUMERIC(8, 2) NOT NULL,
+  -- Frozen from the variant at checkout so order history still renders the
+  -- right label after a product is re-packed or withdrawn.
+  unit        TEXT NOT NULL DEFAULT 'kg',
   quantity    INT NOT NULL CHECK (quantity > 0),
   unit_price  NUMERIC(10, 2) NOT NULL CHECK (unit_price >= 0),
   total_price NUMERIC(12, 2) NOT NULL CHECK (total_price >= 0),
@@ -123,7 +142,54 @@ CREATE TABLE IF NOT EXISTS order_items (
 
 CREATE INDEX IF NOT EXISTS order_items_order_idx ON order_items (order_id);
 
--- ------------------------------------------------------- access audit log --
+-- -------------------------------------------------------------------- khata --
+-- The farmer credit ledger (khata). A village dairy shop lets a farmer take
+-- feed on credit and settles against it from the milk-collection payment.
+
+-- One row per farmer. The outstanding balance is NOT stored: it is the sum of
+-- the entries below, so a payment can never be recorded without also reducing
+-- what is owed. Storing a running balance would need every write path to keep
+-- it in step, which is exactly how a ledger starts telling the wrong number.
+CREATE TABLE IF NOT EXISTS khata_accounts (
+  id                  SERIAL PRIMARY KEY,
+  -- Linked to the account that buys on credit. NULL for a farmer who has a
+  -- khata but has never signed in to the site.
+  user_id             INT UNIQUE REFERENCES users (id) ON DELETE SET NULL,
+  customer_name       TEXT NOT NULL,
+  phone               TEXT NOT NULL,
+  village             TEXT NOT NULL DEFAULT '',
+  -- Member number at the local milk union, used to reconcile against the
+  -- cooperative's own payment list. NULL when the farmer has no membership.
+  milk_union_member_id TEXT,
+  -- Ceiling the shop has approved. 0 means no credit until the owner raises it.
+  credit_limit        NUMERIC(12, 2) NOT NULL DEFAULT 0 CHECK (credit_limit >= 0),
+  -- When the running balance is due. NULL means no agreed due date.
+  due_date            DATE,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Append-only. Both purchases and payments are rows, so the ledger can be
+-- reprinted in order and audited; nothing is ever edited in place.
+CREATE TABLE IF NOT EXISTS khata_entries (
+  id         SERIAL PRIMARY KEY,
+  account_id INT NOT NULL REFERENCES khata_accounts (id) ON DELETE CASCADE,
+  entry_type TEXT NOT NULL CHECK (entry_type IN ('Purchase', 'Payment')),
+  amount     NUMERIC(12, 2) NOT NULL CHECK (amount > 0),
+  notes      TEXT NOT NULL DEFAULT '',
+  -- Set when the entry came from an order. ON DELETE SET NULL rather than
+  -- CASCADE: cancelling an order must not erase the money the farmer owes.
+  order_id   INT REFERENCES orders (id) ON DELETE SET NULL,
+  entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- A purchase is written once per order, inside the order's transaction. The
+  -- unique index is what stops a retried checkout double-charging the farmer.
+  CONSTRAINT khata_entries_purchase_per_order UNIQUE (order_id, entry_type)
+);
+
+CREATE INDEX IF NOT EXISTS khata_entries_account_idx ON khata_entries (account_id, entry_date DESC, id DESC);
+
+-- ------------------------------------------------------------- access audit log --
 CREATE TABLE IF NOT EXISTS visits (
   id         SERIAL PRIMARY KEY,
   ip         TEXT NOT NULL,
@@ -151,4 +217,9 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS products_touch_updated_at ON products;
 CREATE TRIGGER products_touch_updated_at
   BEFORE UPDATE ON products
+  FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+DROP TRIGGER IF EXISTS khata_accounts_touch_updated_at ON khata_accounts;
+CREATE TRIGGER khata_accounts_touch_updated_at
+  BEFORE UPDATE ON khata_accounts
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();

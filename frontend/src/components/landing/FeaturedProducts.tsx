@@ -1,9 +1,10 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { RatingStars } from '../common/RatingStars';
-import { Product } from '../../types';
+import { ProductImage } from '../common/ProductImage';
+import { formatVariantLabel } from '../../utils/variants';
 import { useInView, useScrollProgress, parallaxOffset } from '../../hooks/useScrollProgress';
-import { ShoppingBag, Heart, Eye, ArrowRight, ShieldCheck } from 'lucide-react';
+import { ShoppingBag, Heart, Eye, ArrowRight, ShieldCheck, Tag } from 'lucide-react';
 
 const HEADER_TRAVEL = 14;
 
@@ -37,10 +38,11 @@ export const FeaturedProducts: React.FC = () => {
               Best Sellers
             </div>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Top Rated Cattle Feeds & Supplements
+              Top Rated Feeds, Dairy Gear & Farm Essentials
             </h2>
             <p className="text-slate-300 text-xs sm:text-sm mt-1">
-              Tested for milk fat % increase and daily yield improvement across 10,000+ dairy farms.
+              Milk-tested nutrition alongside the equipment, hardware and field supplies it takes to
+              run a working farm.
             </p>
           </div>
 
@@ -48,7 +50,7 @@ export const FeaturedProducts: React.FC = () => {
             onClick={() => setCurrentView('shop')}
             className="flex items-center gap-1.5 text-xs font-bold text-white bg-[#10b981] hover:bg-[#059669] px-4 py-2.5 rounded-xl transition-colors cursor-pointer shadow-md"
           >
-            <span>View All Store Feeds</span>
+            <span>View Full Catalogue</span>
             <ArrowRight className="w-4 h-4" />
           </button>
         </div>
@@ -77,10 +79,9 @@ export const FeaturedProducts: React.FC = () => {
               >
                 {/* Image & Badges */}
                 <div className="relative h-52 bg-slate-800 overflow-hidden">
-                  <img
+                  <ProductImage
                     src={product.image}
                     alt={product.name}
-                    referrerPolicy="no-referrer"
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                   />
 
@@ -119,11 +120,20 @@ export const FeaturedProducts: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Suitable Animal Pill */}
-                  <div className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/10">
-                    <ShieldCheck className="w-3 h-3 text-emerald-400" />
-                    <span>Suitable: {product.suitableFor.join(', ')}</span>
-                  </div>
+                  {/* Suitable animal, or descriptor tags for hardware */}
+                  {product.suitableFor.length > 0 ? (
+                    <div className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/10">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400" />
+                      <span>Suitable: {product.suitableFor.join(', ')}</span>
+                    </div>
+                  ) : (
+                    product.tags.length > 0 && (
+                      <div className="absolute bottom-3 left-3 right-3 bg-slate-950/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 border border-white/10">
+                        <Tag className="w-3 h-3 text-emerald-400 shrink-0" />
+                        <span className="truncate">{product.tags.slice(0, 2).join(' · ')}</span>
+                      </div>
+                    )
+                  )}
                 </div>
 
                 {/* Card Body */}
@@ -143,15 +153,15 @@ export const FeaturedProducts: React.FC = () => {
                       <RatingStars rating={product.rating} count={product.reviewCount} />
                     </div>
 
-                    {/* Weight Selection */}
+                    {/* Pack sizes */}
                     <div className="mt-3 flex items-center gap-1.5 flex-wrap text-xs">
-                      <span className="text-[11px] text-slate-400">Weight:</span>
+                      <span className="text-[11px] text-slate-400">Pack:</span>
                       {product.weightOptions.map((opt) => (
                         <span
                           key={opt.weightKg}
                           className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-200 font-semibold text-[11px]"
                         >
-                          {opt.weightKg} kg
+                          {formatVariantLabel(opt.weightKg, opt.unit)}
                         </span>
                       ))}
                     </div>
@@ -171,7 +181,7 @@ export const FeaturedProducts: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => addToCart(product, product.selectedWeightKg || 50, 1)}
+                      onClick={() => addToCart(product, product.selectedWeightKg || product.weightOptions[0]?.weightKg || 1, 1)}
                       className="flex items-center gap-1.5 bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95"
                     >
                       <ShoppingBag className="w-3.5 h-3.5" />

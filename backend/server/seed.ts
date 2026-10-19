@@ -11,7 +11,7 @@ const DEMO_USERS: { email: string; password: string; name: string; role: Session
   {
     email: 'admin@pashufeed.test',
     password: 'Admin@12345',
-    name: 'Ramesh Patil',
+    name: 'Pratik Gunjal',
     role: 'admin',
     village: 'Kagal, Kolhapur',
   },
@@ -52,9 +52,9 @@ async function seedCatalogue(): Promise<void> {
          id, name, brand, category_id, description, suitable_for, nutritional_info,
          ingredients, feeding_instructions, benefits, image, price, original_price,
          discount_percent, default_weight_kg, rating, review_count, stock_count, min_stock_level,
-         sku, batch_number, expiry_date, is_best_seller, is_recommended
+         sku, batch_number, expiry_date, is_best_seller, is_recommended, unit, tags, highlights
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          brand = EXCLUDED.brand,
@@ -78,27 +78,38 @@ async function seedCatalogue(): Promise<void> {
          batch_number = EXCLUDED.batch_number,
          expiry_date = EXCLUDED.expiry_date,
          is_best_seller = EXCLUDED.is_best_seller,
-         is_recommended = EXCLUDED.is_recommended`,
+         is_recommended = EXCLUDED.is_recommended,
+         unit = EXCLUDED.unit,
+         tags = EXCLUDED.tags,
+         highlights = EXCLUDED.highlights`,
       [
         p.id, p.name, p.brand, p.category, p.description, p.suitableFor,
         JSON.stringify(p.nutritionalInfo), p.ingredients, p.feedingInstructions,
         p.benefits, p.image, p.price, p.originalPrice, p.discountPercent,
-        p.selectedWeightKg, p.rating, p.reviewCount, p.stockCount, p.minStockLevel, p.sku,
-        p.batchNumber, p.expiryDate, p.isBestSeller ?? false, p.isRecommended ?? false,
+        p.selectedWeightKg, p.rating, p.reviewCount, p.stockCount, p.minStockLevel,         p.sku,
+        p.batchNumber || null, p.expiryDate || null, p.isBestSeller ?? false, p.isRecommended ?? false,
+        p.unit, p.tags, p.highlights,
       ]
     );
   }
 
   for (const p of PRODUCT_SEED) {
     await query(
-      `INSERT INTO product_variants (product_id, weight_kg, price, stock)
-       SELECT $1, w.weight_kg, w.price, w.stock
-       FROM unnest($2::numeric[], $3::numeric[], $4::int[])
-         AS w(weight_kg, price, stock)
+      `INSERT INTO product_variants (product_id, weight_kg, price, stock, unit)
+       SELECT $1, w.weight_kg, w.price, w.stock, w.unit
+       FROM unnest($2::numeric[], $3::numeric[], $4::int[], $5::text[])
+         AS w(weight_kg, price, stock, unit)
        ON CONFLICT (product_id, weight_kg) DO UPDATE
          SET price = EXCLUDED.price,
-             stock = EXCLUDED.stock`,
-      [p.id, p.weightOptions.map((v) => v.weightKg), p.weightOptions.map((v) => v.price), p.weightOptions.map((v) => v.stock)]
+             stock = EXCLUDED.stock,
+             unit = EXCLUDED.unit`,
+      [
+        p.id,
+        p.weightOptions.map((v) => v.weightKg),
+        p.weightOptions.map((v) => v.price),
+        p.weightOptions.map((v) => v.stock),
+        p.weightOptions.map((v) => v.unit),
+      ]
     );
   }
 

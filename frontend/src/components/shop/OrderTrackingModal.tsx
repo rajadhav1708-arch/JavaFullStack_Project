@@ -1,5 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { ProductImage } from '../common/ProductImage';
+import { formatVariantLabel } from '../../utils/variants';
 import { Truck, CheckCircle2, Phone, Printer, ArrowLeft } from 'lucide-react';
 
 export const OrderTrackingModal: React.FC = () => {
@@ -150,10 +152,12 @@ export const OrderTrackingModal: React.FC = () => {
               {order.items.map((item, idx) => (
                 <div key={idx} className="p-3.5 flex items-center justify-between gap-4 text-xs">
                   <div className="flex items-center gap-3">
-                    <img src={item.image} alt={item.productName} className="w-12 h-12 object-cover rounded-xl" />
+                    <ProductImage src={item.image} alt={item.productName} width={48} height={48} className="w-12 h-12 object-cover rounded-xl" />
                     <div>
                       <div className="font-bold text-slate-900">{item.productName}</div>
-                      <div className="text-slate-500">{item.weightKg} kg Bag x{item.quantity}</div>
+                      <div className="text-slate-500">
+                        {formatVariantLabel(item.weightKg, item.unit ?? 'kg')} × {item.quantity}
+                      </div>
                     </div>
                   </div>
                   <div className="font-black text-slate-900">₹{item.totalPrice.toLocaleString('en-IN')}</div>

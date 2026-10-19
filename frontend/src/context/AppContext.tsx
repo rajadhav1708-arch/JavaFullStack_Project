@@ -14,12 +14,6 @@ import {
   ProductCategory,
   ProductCategoryMeta,
 } from '../types';
-import {
-  MOCK_ORDERS,
-  MOCK_KHATA_RECORDS,
-  MOCK_SUBSCRIPTIONS,
-  MOCK_NOTIFICATIONS,
-} from '../data/mockData';
 
 interface ToastMessage {
   id: string;
@@ -69,6 +63,7 @@ interface AppContextType {
     customCart?: CartItem[]
   ) => Promise<Order>;
   refreshOrders: () => Promise<void>;
+  fetchKhata: () => Promise<void>;
   
   khataRecords: KhataRecord[];
   addKhataPayment: (recordId: string, amount: number, notes: string) => void;
@@ -111,12 +106,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [cart, setCart] = useState<CartItem[]>([]);
   
   const [wishlist, setWishlist] = useState<string[]>(['prod-1', 'prod-3']);
-  const [orders, setOrders] = useState<Order[]>(MOCK_ORDERS);
-  const [activeOrderForTracking, setActiveOrderForTracking] = useState<Order | null>(MOCK_ORDERS[0]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [activeOrderForTracking, setActiveOrderForTracking] = useState<Order | null>(null);
   
-  const [khataRecords, setKhataRecords] = useState<KhataRecord[]>(MOCK_KHATA_RECORDS);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>(MOCK_SUBSCRIPTIONS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(MOCK_NOTIFICATIONS);
+  const [khataRecords, setKhataRecords] = useState<KhataRecord[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
@@ -301,8 +296,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  /** Loads the Khata ledger from the API. Staff see every account; a customer
+   *  sees only their own (the server enforces this). No-ops when signed out. */
+  const fetchKhata = async (): Promise<void> => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/khata');
+      if (!res.ok) return;
+      const data = (await res.json()) as { accounts: KhataRecord[] };
+      setKhataRecords(data.accounts);
+    } catch {
+      // Keep the current list if the API is unreachable.
+    }
+  };
+
   useEffect(() => {
     void refreshOrders();
+    void fetchKhata();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
@@ -399,6 +409,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setActiveOrderForTracking(newOrder);
     addToast(`Order #${newOrder.orderNumber} placed successfully!`, 'success');
+
+    // Reconcile the ledger with the server, especially for Khata Credit orders
+    // which wrote a purchase entry inside the order's transaction.
+    void fetchKhata();
   };
 
   /** Offline/demo path used only when the API or database is unavailable. */
@@ -427,6 +441,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         productName: item.product.name,
         brand: item.product.brand,
         weightKg: item.weightKg,
+        // Frozen from the chosen variant so order history keeps the right label
+        // even if the product is re-packed later.
+        unit:
+          item.product.weightOptions.find((w) => w.weightKg === item.weightKg)?.unit ??
+          item.product.unit ??
+          'kg',
         quantity: item.quantity,
         unitPrice: item.price,
         totalPrice: item.price * item.quantity,
@@ -452,33 +472,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const addKhataPayment = (recordId: string, amount: number, notes: string) => {
-    setKhataRecords((prev) =>
-      prev.map((rec) => {
-        if (rec.id === recordId) {
-          const newOutstanding = Math.max(0, rec.totalOutstanding - amount);
-          const newStatus = newOutstanding === 0 ? 'Paid' : 'Partially Paid';
-          return {
-            ...rec,
-            totalOutstanding: newOutstanding,
-            paidAmount: rec.paidAmount + amount,
-            status: newStatus,
-            transactions: [
-              {
-                id: `tx-${Date.now()}`,
-                date: new Date().toISOString().split('T')[0],
-                type: 'Payment',
-                amount,
-                notes: notes || 'Cash/UPI Payment at shop counter',
-              },
-              ...rec.transactions,
-            ],
-          };
-        }
-        return rec;
-      })
-    );
-    addToast(`Recorded ₹${amount} payment for Khata ledger!`, 'success');
+  const addKhataPayment = async (recordId: string, amount: number, notes: string) => {
+    const id = Number(String(recordId).replace(/^kht-/, ''));
+    if (!Number.isInteger(id) || id < 1) {
+      addToast('Invalid Khata record.', 'error');
+      return;
+    }
+    try {
+      const res = await fetch(`/api/khata/${id}/payment`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, notes }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { message?: string };
+        addToast(body.message ?? 'Could not record the payment.', 'error');
+        return;
+      }
+      await fetchKhata();
+      addToast(`Recorded ₹${amount} payment for Khata ledger!`, 'success');
+    } catch {
+      addToast('Could not record the payment. Please try again.', 'error');
+    }
   };
 
   const addSubscription = (product: Product, weightKg: number, qty: number, freqDays: number) => {
@@ -542,6 +557,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setActiveOrderForTracking,
         placeOrder,
         refreshOrders,
+        fetchKhata,
         khataRecords,
         addKhataPayment,
         subscriptions,

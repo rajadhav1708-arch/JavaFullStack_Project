@@ -28,7 +28,7 @@ export const InventoryManagement: React.FC = () => {
     sku: 'PP-NEW-50KG',
     batchNumber: 'BT-2026-0901',
     expiryDate: '2027-04-01',
-    image: 'https://images.unsplash.com/photo-1546445317-29f4545f9d52?auto=format&fit=crop&q=80&w=800',
+    image: '/images/placeholder.svg',
   });
 
   const filtered = products.filter((p) => {
@@ -50,6 +50,7 @@ export const InventoryManagement: React.FC = () => {
       brand: newProd.brand,
       category: newProd.category,
       suitableFor: ['Cow', 'Buffalo'],
+      tags: [],
       description: 'High-quality certified compound cattle feed.',
       nutritionalInfo: {
         crudeProtein: '20.0%',
@@ -63,8 +64,10 @@ export const InventoryManagement: React.FC = () => {
       ingredients: ['Maize Bran', 'Mustard Cake', 'Mineral Mixture'],
       feedingInstructions: 'Feed 1kg per 2.5L milk yield daily.',
       benefits: ['Boosts daily milk yield', 'Maintains milk fat test'],
-      weightOptions: [{ weightKg: newProd.weightKg, price: newProd.price, stock: newProd.stockCount }],
+      highlights: ['Boosts daily milk yield', 'Maintains milk fat test', 'Lab-tested batch'],
+      weightOptions: [{ weightKg: newProd.weightKg, unit: 'kg', price: newProd.price, stock: newProd.stockCount }],
       selectedWeightKg: newProd.weightKg,
+      unit: 'kg',
       price: newProd.price,
       originalPrice: newProd.price + 200,
       discountPercent: 10,
@@ -194,7 +197,7 @@ export const InventoryManagement: React.FC = () => {
                     </td>
                     <td className="p-4">{prod.category}</td>
                     <td className="p-4 font-mono text-[11px] text-slate-600">{prod.batchNumber}</td>
-                    <td className="p-4 font-bold text-slate-900">{prod.stockCount} Bags</td>
+                    <td className="p-4 font-bold text-slate-900">{prod.stockCount} {prod.unit === 'kg' ? 'Bags' : 'Units'}</td>
                     <td className="p-4 font-bold text-emerald-800">₹{prod.price}</td>
                     <td className="p-4 text-slate-600">{prod.expiryDate}</td>
                     <td className="p-4">

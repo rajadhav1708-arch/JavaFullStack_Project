@@ -29,13 +29,14 @@ export const CategoryGrid: React.FC = () => {
           >
           <div className="inline-flex items-center gap-1.5 bg-[#065f46] text-[#34d399] text-xs font-bold px-3 py-1 rounded-full mb-3 border border-emerald-500/30">
             <Sparkles className="w-3.5 h-3.5 text-[#34d399]" />
-            <span>Targeted Cattle Nutrition</span>
+            <span>Shop by Category</span>
           </div>
           <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-            Explore Feeds by Animal Needs
+            Feeds, Dairy Gear & Farm Supplies
           </h2>
           <p className="text-slate-300 text-sm sm:text-base mt-2">
-            Select high-performance feeds engineered specifically for high-yielding cows, buffaloes, growing calves, or heat cycle maintenance.
+            From precision cattle nutrition to the hardware, machinery and field gear a working
+            farm actually runs on.
           </p>
         </div>
 
@@ -45,7 +46,7 @@ export const CategoryGrid: React.FC = () => {
           {/* Categories load from the API; show placeholders rather than a
               collapsed grid that pops in a moment later. */}
           {isCatalogueLoading &&
-            Array.from({ length: 8 }).map((_, index) => (
+            Array.from({ length: 12 }).map((_, index) => (
               <div
                 key={`skeleton-${index}`}
                 className="h-64 rounded-2xl bg-white/5 border border-white/10 animate-pulse"
@@ -64,6 +65,8 @@ export const CategoryGrid: React.FC = () => {
                   src={cat.image}
                   alt={cat.name}
                   referrerPolicy="no-referrer"
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                 />
                 <div className="absolute top-3 right-3 bg-slate-950/80 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full border border-white/10 shadow-sm">

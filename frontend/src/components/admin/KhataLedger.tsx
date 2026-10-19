@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { KhataAccount } from '../../types';
 import {
@@ -9,12 +9,17 @@ import {
 } from 'lucide-react';
 
 export const KhataLedger: React.FC = () => {
-  const { khataRecords, addKhataPayment, addToast } = useApp();
+  const { khataRecords, addKhataPayment, addToast, fetchKhata } = useApp();
 
   const [search, setSearch] = useState('');
   const [selectedRecord, setSelectedRecord] = useState<KhataAccount | null>(null);
   const [paymentAmount, setPaymentAmount] = useState<number>(5000);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+
+  useEffect(() => {
+    void fetchKhata();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchKhata]);
 
   const filtered = khataRecords.filter(
     (k) =>
@@ -22,13 +27,12 @@ export const KhataLedger: React.FC = () => {
       k.village.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAddPaymentSubmit = (e: React.FormEvent) => {
+  const handleAddPaymentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedRecord || paymentAmount <= 0) return;
 
-    addKhataPayment(selectedRecord.id, paymentAmount, 'Milk Collection Auto-Deduction');
+    await addKhataPayment(selectedRecord.id, paymentAmount, 'Milk Collection Auto-Deduction');
     setIsPaymentModalOpen(false);
-    addToast(`Recorded ₹${paymentAmount} payment for ${selectedRecord.customerName}`, 'success');
   };
 
   const handleSendReminder = (customerName: string, phone: string, amount: number) => {

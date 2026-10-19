@@ -2,6 +2,8 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import { ProductImage } from '../common/ProductImage';
+import { formatCartVariantLabel, summariseCartUnits } from '../../utils/variants';
 import {
   X,
   Trash2,
@@ -25,7 +27,9 @@ export const CartDrawer: React.FC = () => {
 
   if (!isCartDrawerOpen) return null;
 
-  const totalWeightKg = cart.reduce((acc, item) => acc + item.weightKg * item.quantity, 0);
+  // Summing kilograms across a cart that also holds litres and sprayers
+  // produces a number that means nothing, so totals are grouped by unit.
+  const cartUnits = summariseCartUnits(cart);
 
   const handleProceedCheckout = () => {
     setIsCartDrawerOpen(false);
@@ -106,9 +110,12 @@ export const CartDrawer: React.FC = () => {
                     transition={{ duration: 0.3 }}
                     className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3"
                   >
-                    <img
+                    <ProductImage
                       src={item.product.image}
                       alt={item.product.name}
+                      eager
+                      width={64}
+                      height={64}
                       className="w-16 h-16 object-cover rounded-xl border border-slate-200 shrink-0"
                     />
 
@@ -116,7 +123,7 @@ export const CartDrawer: React.FC = () => {
                       <div className="text-[10px] font-bold text-emerald-800 uppercase">{item.product.brand}</div>
                       <h4 className="text-xs font-bold text-slate-900 truncate">{item.product.name}</h4>
                       <div className="text-[11px] text-slate-500 mt-0.5">
-                        {item.weightKg} kg Bag {item.isSubscription && <span className="text-amber-700 font-bold">(Auto-Deliver)</span>}
+                        {formatCartVariantLabel(item.product, item.weightKg)} {item.isSubscription && <span className="text-amber-700 font-bold">(Auto-Deliver)</span>}
                       </div>
 
                       <div className="flex items-center justify-between mt-2">
@@ -169,13 +176,15 @@ export const CartDrawer: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="p-5 border-t border-slate-200 bg-white space-y-3"
             >
-              {/* Weight Transport Info */}
-              <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-900 text-xs flex items-center justify-between">
-                <div className="flex items-center gap-1.5 font-bold">
+              {/* Order contents summary */}
+              <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-900 text-xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-1.5 font-bold shrink-0">
                   <Truck className="w-4 h-4 text-emerald-700" />
-                  <span>Total Freight Weight:</span>
+                  <span>Order Contents:</span>
                 </div>
-                <span className="font-black text-emerald-800">{totalWeightKg} kg</span>
+                <span className="font-black text-emerald-800 text-right truncate">
+                  {cartUnits.join(' · ')}
+                </span>
               </div>
 
               <div className="space-y-1.5 text-xs text-slate-600">

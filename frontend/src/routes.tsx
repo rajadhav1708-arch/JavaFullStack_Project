@@ -37,7 +37,10 @@ const pageVariants = {
   exit: { opacity: 0, y: -20 },
 };
 
-const pageTransition = { type: 'tween', ease: 'anticipate', duration: 0.35 };
+// Framer's `ease` is a union of named easings and cubic-bezier tuples, so a
+// bare object literal widens to `string` and is rejected. 'easeInOut' is the
+// built-in the original was reaching for.
+const pageTransition = { type: 'tween', ease: 'easeInOut', duration: 0.35 } as const;
 
 function PageWrapper({ children }: { children: React.ReactNode }) {
   return (

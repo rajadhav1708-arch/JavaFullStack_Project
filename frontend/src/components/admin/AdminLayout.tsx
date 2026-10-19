@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import type { AdminTab } from '../../types';
 import { AdminOverview } from './AdminOverview';
 import { SalesAnalytics } from './SalesAnalytics';
 import { InventoryManagement } from './InventoryManagement';
@@ -27,6 +28,7 @@ import {
   Eye,
   Settings,
   ChevronRight,
+  type LucideIcon,
 } from 'lucide-react';
 
 /**
@@ -34,8 +36,8 @@ import {
  * counter; the owner additionally sees revenue, credit, supplier and config
  * records. Both lists are enforced again on the matching API routes.
  */
-const STAFF_TABS = ['overview', 'inventory', 'pos', 'delivery'] as const;
-const ADMIN_TABS = [
+const STAFF_TABS: readonly AdminTab[] = ['overview', 'inventory', 'pos', 'delivery'];
+const ADMIN_TABS: readonly AdminTab[] = [
   'overview',
   'analytics',
   'inventory',
@@ -59,7 +61,7 @@ export const AdminLayout: React.FC = () => {
   const isOwner = user?.role === 'admin' || user?.role === 'employee';
   const allowedTabs = ADMIN_TABS;
 
-  const menuItems = [
+  const ALL_MENU_ITEMS = [
     { id: 'overview', label: 'Overview Dashboard', icon: LayoutDashboard },
     { id: 'analytics', label: 'Sales & Revenue', icon: BarChart3 },
     { id: 'inventory', label: 'Inventory & Batches', icon: Package },
@@ -72,7 +74,9 @@ export const AdminLayout: React.FC = () => {
     { id: 'reports', label: 'GST & Audit Reports', icon: FileText },
     { id: 'access', label: 'Website Access', icon: Eye },
     { id: 'settings', label: 'Store Settings', icon: Settings },
-  ].filter((item) => (allowedTabs as readonly string[]).includes(item.id));
+  ] satisfies { id: AdminTab; label: string; icon: LucideIcon }[];
+
+  const menuItems = ALL_MENU_ITEMS.filter((item) => allowedTabs.includes(item.id));
 
   // Staff should never be left staring at a tab their role cannot open.
   React.useEffect(() => {

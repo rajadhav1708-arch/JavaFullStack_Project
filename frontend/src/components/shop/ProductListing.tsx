@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product } from '../../types';
 import { RatingStars } from '../common/RatingStars';
+import { ProductImage } from '../common/ProductImage';
+import { formatVariantLabel, formatCartVariantLabel } from '../../utils/variants';
 import {
   Search,
   Filter,
@@ -13,8 +15,13 @@ import {
   ShoppingBag,
   RotateCcw,
   ShieldCheck,
+  Tag,
   X,
 } from 'lucide-react';
+
+/** Drives the "Suitable Animal" filter. Kept in one place because it appears in
+ *  both the desktop sidebar and the mobile drawer. */
+const ANIMAL_FILTERS = ['All', 'Cow', 'Buffalo', 'Calf', 'Pregnant Heifer'] as const;
 
 export const ProductListing: React.FC = () => {
   const {
@@ -128,15 +135,18 @@ export const ProductListing: React.FC = () => {
         {/* Breadcrumb & Header Title */}
         <div className="mb-6">
           <div className="text-xs font-medium text-slate-500 mb-1">
-            Home &gt; <span className="text-emerald-800 font-bold">Cattle Feed Store</span>
+            Home &gt;{' '}
+            <span className="text-emerald-800 font-bold">
+              {selectedCategory === 'All' ? 'Full Catalogue' : selectedCategory}
+            </span>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                Cattle Feeds & Dairy Supplements
+                Cattle Feeds, Dairy Gear & Farm Supplies
               </h1>
               <p className="text-slate-500 text-xs sm:text-sm mt-1">
-                Showing {filteredProducts.length} certified products for cows, buffaloes, and calves.
+                Showing {filteredProducts.length} products across feeds, supplements, dairy equipment, hardware and field gear.
               </p>
             </div>
 
@@ -213,8 +223,11 @@ export const ProductListing: React.FC = () => {
                 <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
                   Suitable Animal
                 </label>
+                <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
+                  Feeds and supplements only. Hardware and equipment show under All Animals.
+                </p>
                 <div className="space-y-1.5 text-xs">
-                  {['All', 'Cow', 'Buffalo', 'Calf', 'Pregnant Heifer'].map((animal) => (
+                  {ANIMAL_FILTERS.map((animal) => (
                     <label
                       key={animal}
                       className="flex items-center gap-2 text-slate-700 hover:text-slate-900 cursor-pointer"
@@ -320,9 +333,10 @@ export const ProductListing: React.FC = () => {
                 <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4">
                   <Search className="w-8 h-8" />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900">No Cattle Feeds Found</h3>
+                <h3 className="text-lg font-bold text-slate-900">No Products Found</h3>
                 <p className="text-slate-500 text-xs mt-1.5 max-w-sm mx-auto">
-                  We couldn&apos;t find any products matching your search criteria or selected category filter.
+                  We couldn&apos;t find anything matching your search or the selected filters. Hardware
+                  is not shown when you filter by animal.
                 </p>
                 <button
                   onClick={resetFilters}
@@ -355,7 +369,7 @@ export const ProductListing: React.FC = () => {
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-end">
           <div className="bg-white w-full max-w-xs h-full p-6 space-y-6 overflow-y-auto">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <span className="font-bold text-slate-900 text-base">Filter Feeds</span>
+              <span className="font-bold text-slate-900 text-base">Filter Products</span>
               <button onClick={() => setIsMobileFilterOpen(false)}>
                 <X className="w-5 h-5 text-slate-500" />
               </button>
@@ -365,15 +379,18 @@ export const ProductListing: React.FC = () => {
             <div>
               <label className="text-xs font-bold text-slate-800 uppercase block mb-2">Suitable Animal</label>
               <div className="space-y-2 text-xs">
-                {['All', 'Cow', 'Buffalo', 'Calf', 'Pregnant Heifer'].map((animal) => (
-                  <label key={animal} className="flex items-center gap-2 text-slate-700">
-                    <input
-                      type="radio"
-                      name="mAnimalType"
-                      checked={selectedAnimal === animal}
-                      onChange={() => setSelectedAnimal(animal)}
-                      className="text-emerald-700"
-                    />
+{ANIMAL_FILTERS.map((animal) => (
+                    <label
+                      key={animal}
+                      className="flex items-center gap-2 text-slate-700 cursor-pointer"
+                    >
+                      <input
+                        type="radio"
+                        name="mAnimalType"
+                        checked={selectedAnimal === animal}
+                        onChange={() => setSelectedAnimal(animal)}
+                        className="text-emerald-700"
+                      />
                     <span>{animal}</span>
                   </label>
                 ))}
@@ -406,7 +423,7 @@ const ProductCardGrid: React.FC<{ product: Product }> = ({ product }) => {
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-xl hover:border-emerald-500/40 transition-all flex flex-col justify-between group overflow-hidden">
       {/* Image Container */}
       <div className="relative h-48 bg-slate-100 overflow-hidden">
-        <img
+        <ProductImage
           src={product.image}
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -440,11 +457,20 @@ const ProductCardGrid: React.FC<{ product: Product }> = ({ product }) => {
           </button>
         </div>
 
-        {/* Animal Tag */}
-        <div className="absolute bottom-2.5 left-2.5 bg-slate-900/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
-          <ShieldCheck className="w-3 h-3 text-emerald-400" />
-          <span>{product.suitableFor.join(', ')}</span>
-        </div>
+        {/* Animal tag, or descriptor tags for hardware with no animal */}
+        {product.suitableFor.length > 0 ? (
+          <div className="absolute bottom-2.5 left-2.5 bg-slate-900/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+            <ShieldCheck className="w-3 h-3 text-emerald-400" />
+            <span>{product.suitableFor.join(', ')}</span>
+          </div>
+        ) : (
+          product.tags.length > 0 && (
+            <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-900/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 truncate">
+              <Tag className="w-3 h-3 text-emerald-400 shrink-0" />
+              <span className="truncate">{product.tags.slice(0, 2).join(' · ')}</span>
+            </div>
+          )
+        )}
       </div>
 
       {/* Body */}
@@ -462,7 +488,17 @@ const ProductCardGrid: React.FC<{ product: Product }> = ({ product }) => {
             <RatingStars rating={product.rating} count={product.reviewCount} />
           </div>
 
-          {/* Weight selector */}
+          {/* Feature highlights */}
+          <ul className="mt-2.5 space-y-1">
+            {product.highlights.slice(0, 2).map((highlight) => (
+              <li key={highlight} className="flex items-start gap-1.5 text-[11px] text-slate-600 leading-snug">
+                <span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
+                <span className="line-clamp-1">{highlight}</span>
+              </li>
+            ))}
+          </ul>
+
+          {/* Variant selector */}
           <div className="mt-3 flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] text-slate-400">Pack:</span>
             {product.weightOptions.map((opt) => (
@@ -475,7 +511,7 @@ const ProductCardGrid: React.FC<{ product: Product }> = ({ product }) => {
                     : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
                 }`}
               >
-                {opt.weightKg} kg
+                {formatVariantLabel(opt.weightKg, opt.unit)}
               </button>
             ))}
           </div>
@@ -512,15 +548,28 @@ const ProductCardList: React.FC<{ product: Product }> = ({ product }) => {
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-lg transition-all flex flex-col sm:flex-row items-center justify-between gap-6">
       <div className="flex items-center gap-4 w-full sm:w-auto">
-        <img
+        <ProductImage
           src={product.image}
           alt={product.name}
           className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-xl shrink-0 border border-slate-100"
         />
-        <div className="space-y-1">
-          <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-50 px-2 py-0.5 rounded-md">
-            {product.brand}
-          </span>
+        <div className="space-y-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-50 px-2 py-0.5 rounded-md">
+              {product.brand}
+            </span>
+            {product.suitableFor.length > 0 ? (
+              <span className="text-[10px] font-bold text-slate-600 uppercase bg-slate-100 px-2 py-0.5 rounded-md">
+                {product.suitableFor.join(', ')}
+              </span>
+            ) : (
+              product.tags.slice(0, 2).map((tag) => (
+                <span key={tag} className="text-[10px] font-bold text-slate-600 uppercase bg-slate-100 px-2 py-0.5 rounded-md">
+                  {tag}
+                </span>
+              ))
+            )}
+          </div>
           <h3
             onClick={() => setSelectedProduct(product)}
             className="text-base font-bold text-slate-900 hover:text-emerald-700 transition-colors cursor-pointer"
@@ -537,7 +586,9 @@ const ProductCardList: React.FC<{ product: Product }> = ({ product }) => {
       <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0">
         <div className="text-right">
           <div className="text-lg font-black text-slate-900">₹{priceToDisplay.toLocaleString('en-IN')}</div>
-          <div className="text-[10px] text-slate-400">In Stock ({product.stockCount} Bags)</div>
+          <div className="text-[10px] text-slate-400">
+            {formatCartVariantLabel(product, selectedWeight)} · {product.stockCount} in stock
+          </div>
         </div>
 
         <button

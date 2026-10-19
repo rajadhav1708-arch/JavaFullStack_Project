@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { MOCK_SALES_ANALYTICS } from '../../data/mockData';
+import type { Order } from '../../types';
 import {
   TrendingUp,
   AlertTriangle,
@@ -10,11 +10,28 @@ import {
   Truck,
 } from 'lucide-react';
 
+/**
+ * Badge colour per order status. Every status gets an explicit colour: the old
+ * conditional chain fell through to red, which painted every order still in
+ * flight (Placed, Packed, Out for Delivery) as if it had failed.
+ */
+const STATUS_BADGE: Record<Order['status'], string> = {
+  Placed: 'bg-slate-100 text-slate-700',
+  Confirmed: 'bg-blue-100 text-blue-700',
+  Packed: 'bg-indigo-100 text-indigo-700',
+  Shipped: 'bg-amber-100 text-amber-700',
+  'Out for Delivery': 'bg-amber-100 text-amber-700',
+  Delivered: 'bg-green-100 text-green-700',
+  Cancelled: 'bg-red-100 text-red-700',
+};
+
 export const AdminOverview: React.FC = () => {
   const { products, orders, khataRecords, setAdminTab } = useApp();
 
   const lowStockProducts = products.filter((p) => p.stockCount <= p.minStockLevel);
   const overdueKhataCount = khataRecords.filter((k) => k.status === 'Overdue').length;
+  const todaySales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const totalKhataOutstanding = khataRecords.reduce((sum, k) => sum + k.totalOutstanding, 0);
 
   return (
     <div className="space-y-6">
@@ -44,7 +61,7 @@ export const AdminOverview: React.FC = () => {
             <TrendingUp className="w-3.5 h-3.5 text-[#10b981]" />
           </div>
           <div className="text-2xl font-bold mt-1 text-slate-900">
-            ₹{MOCK_SALES_ANALYTICS.todaySales.toLocaleString('en-IN')}
+            ₹{todaySales.toLocaleString('en-IN')}
           </div>
           <div className="text-[10px] text-green-600 font-semibold mt-1 flex items-center gap-0.5">
             <ArrowUpRight className="w-3 h-3" />
@@ -58,7 +75,7 @@ export const AdminOverview: React.FC = () => {
             <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
           </div>
           <div className="text-2xl font-bold mt-1 text-slate-900">
-            ₹{MOCK_SALES_ANALYTICS.totalKhataOutstanding.toLocaleString('en-IN')}
+            ₹{totalKhataOutstanding.toLocaleString('en-IN')}
           </div>
           <div className="text-[10px] text-amber-600 font-semibold mt-1">
             {overdueKhataCount} farmers overdue (&gt;30 days)
@@ -97,7 +114,7 @@ export const AdminOverview: React.FC = () => {
           <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
             <h3 className="font-bold text-slate-800 text-sm">Recent Sales & Transactions</h3>
             <button
-              onClick={() => setAdminTab('orders')}
+              onClick={() => setAdminTab('delivery')}
               className="text-xs text-[#10b981] font-semibold hover:underline cursor-pointer"
             >
               View All
@@ -124,18 +141,12 @@ export const AdminOverview: React.FC = () => {
                       <div className="text-[10px] text-slate-400">{ord.customerVillage}</div>
                     </td>
                     <td className="p-3 text-slate-600 max-w-[180px] truncate">
-                      {ord.items.map((i) => i.name).join(', ')}
+                      {ord.items.map((i) => i.productName).join(', ')}
                     </td>
                     <td className="p-3">
                       <span
                         className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          ord.status === 'Delivered'
-                            ? 'bg-green-100 text-green-700'
-                            : ord.status === 'Shipped'
-                            ? 'bg-amber-100 text-amber-700'
-                            : ord.status === 'Processing'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-red-100 text-red-700'
+                          STATUS_BADGE[ord.status]
                         }`}
                       >
                         {ord.status}

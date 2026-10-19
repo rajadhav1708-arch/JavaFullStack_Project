@@ -5,6 +5,7 @@ import { checkDb, isDbConfigured, pool } from './db';
 import { authRouter } from './routes/auth';
 import { productsRouter } from './routes/products';
 import { ordersRouter } from './routes/orders';
+import { khataRouter } from './routes/khata';
 import { adminRouter } from './routes/admin';
 import { currentUser } from './auth';
 
@@ -195,6 +196,7 @@ app.use('/api', async (req, res, next) => {
 app.use('/api/auth', authRouter);
 app.use('/api', productsRouter);
 app.use('/api', ordersRouter);
+app.use('/api', khataRouter);
 app.use('/api', adminRouter);
 
 app.post('/api/track', async (req, res) => {

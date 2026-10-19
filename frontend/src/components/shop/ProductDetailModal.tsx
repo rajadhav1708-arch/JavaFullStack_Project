@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RatingStars } from '../common/RatingStars';
+import { ProductImage } from '../common/ProductImage';
+import { formatVariantLabel, isConsumable } from '../../utils/variants';
 import {
   X,
   ShoppingBag,
@@ -10,6 +12,7 @@ import {
   Repeat,
   Sparkles,
   Info,
+  Wrench,
 } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {
@@ -23,7 +26,7 @@ export const ProductDetailModal: React.FC = () => {
     setCurrentView,
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'desc' | 'nutrition' | 'feeding' | 'reviews'>('desc');
+  const [activeTab, setActiveTab] = useState<'desc' | 'nutrition' | 'usage' | 'reviews'>('desc');
   const [selectedWeight, setSelectedWeight] = useState<number>(selectedProduct?.selectedWeightKg || 50);
   const [quantity, setQuantity] = useState<number>(1);
   const [isSubscribeMode, setIsSubscribeMode] = useState<boolean>(false);
@@ -31,11 +34,15 @@ export const ProductDetailModal: React.FC = () => {
 
   if (!selectedProduct) return null;
 
+  const consumable = isConsumable(selectedProduct);
   const isWishlisted = wishlist.includes(selectedProduct.id);
   const selectedWeightOpt =
     selectedProduct.weightOptions.find((w) => w.weightKg === selectedWeight) || selectedProduct.weightOptions[0];
   const unitPrice = selectedWeightOpt ? selectedWeightOpt.price : selectedProduct.price;
   const totalPrice = unitPrice * quantity;
+  // Subscriptions only make sense for something that is re-ordered and used up.
+  const showSubscribe = consumable;
+  const activeUnit = selectedWeightOpt?.unit ?? selectedProduct.unit;
 
   const handleAddToCart = () => {
     if (isSubscribeMode) {
@@ -68,9 +75,11 @@ export const ProductDetailModal: React.FC = () => {
             {/* Product Image */}
             <div className="md:col-span-5 relative">
               <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 relative group">
-                <img
+                <ProductImage
                   src={selectedProduct.image}
                   alt={selectedProduct.name}
+                  full
+                  eager
                   className="w-full h-80 object-cover"
                 />
                 <button
@@ -91,10 +100,20 @@ export const ProductDetailModal: React.FC = () => {
 
               {/* Lab Trust Badges */}
               <div className="mt-4 p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2.5">
-                <Award className="w-5 h-5 text-emerald-700 shrink-0" />
+                {consumable ? (
+                  <Award className="w-5 h-5 text-emerald-700 shrink-0" />
+                ) : (
+                  <Wrench className="w-5 h-5 text-emerald-700 shrink-0" />
+                )}
                 <div>
-                  <div className="font-bold">BIS Type-II Lab Certified</div>
-                  <div className="text-[11px] text-emerald-700">Batch #{selectedProduct.batchNumber} | Expiry: {selectedProduct.expiryDate}</div>
+                  <div className="font-bold">
+                    {consumable ? 'BIS Type-II Lab Certified' : 'Manufacturer Warranty Support'}
+                  </div>
+                  <div className="text-[11px] text-emerald-700">
+                    {consumable
+                      ? `Batch #${selectedProduct.batchNumber} | Expiry: ${selectedProduct.expiryDate}`
+                      : `Batch #${selectedProduct.batchNumber} | SKU: ${selectedProduct.sku}`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -127,15 +146,28 @@ export const ProductDetailModal: React.FC = () => {
                     ₹{selectedProduct.originalPrice.toLocaleString('en-IN')}
                   </span>
                 )}
-                <span className="text-xs text-slate-500">per bag (Incl. Taxes)</span>
+                <span className="text-xs text-slate-500">per {activeUnit} (Incl. Taxes)</span>
               </div>
 
-              {/* Weight Options */}
+              {/* Feature highlights */}
+              <ul className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+                {selectedProduct.highlights.slice(0, 3).map((highlight) => (
+                  <li
+                    key={highlight}
+                    className="flex items-start gap-1.5 text-[11px] font-medium text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-2"
+                  >
+                    <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-px" />
+                    <span>{highlight}</span>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Pack options */}
               <div>
                 <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1.5">
-                  Select Packaging Bag Weight:
+                  Select Pack Size:
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {selectedProduct.weightOptions.map((opt) => (
                     <button
                       key={opt.weightKg}
@@ -146,7 +178,7 @@ export const ProductDetailModal: React.FC = () => {
                           : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
                       }`}
                     >
-                      {opt.weightKg} kg Bag — ₹{opt.price}
+                      {formatVariantLabel(opt.weightKg, opt.unit)} — ₹{opt.price}
                     </button>
                   ))}
                 </div>
@@ -154,7 +186,7 @@ export const ProductDetailModal: React.FC = () => {
 
               {/* Quantity Counter */}
               <div className="flex items-center gap-4">
-                <span className="text-xs font-bold text-slate-700 uppercase">Bags Quantity:</span>
+                <span className="text-xs font-bold text-slate-700 uppercase">Quantity:</span>
                 <div className="flex items-center border border-slate-300 rounded-xl bg-slate-50 overflow-hidden">
                   <button
                     onClick={() => setQuantity(Math.max(1, quantity - 1))}
@@ -175,38 +207,41 @@ export const ProductDetailModal: React.FC = () => {
                 </span>
               </div>
 
-              {/* Subscribe & Save Checkbox Toggle */}
-              <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-xs space-y-2">
-                <label className="flex items-center gap-2 font-bold text-amber-900 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isSubscribeMode}
-                    onChange={(e) => setIsSubscribeMode(e.target.checked)}
-                    className="rounded text-amber-600 focus:ring-amber-500"
-                  />
-                  <Repeat className="w-4 h-4 text-amber-700" />
-                  <span>Subscribe & Auto-Deliver Monthly (Extra 5% Discount)</span>
-                </label>
+              {/* Subscribe & Save Toggle. Only consumables can be re-ordered on a cycle,
+                  so a sprayer or a coil of wire never shows this. */}
+              {showSubscribe && (
+                <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-200 text-xs space-y-2">
+                  <label className="flex items-center gap-2 font-bold text-amber-900 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isSubscribeMode}
+                      onChange={(e) => setIsSubscribeMode(e.target.checked)}
+                      className="rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <Repeat className="w-4 h-4 text-amber-700" />
+                    <span>Subscribe & Auto-Deliver Monthly (Extra 5% Discount)</span>
+                  </label>
 
-                {isSubscribeMode && (
-                  <div className="pt-2 border-t border-amber-200/60 flex items-center gap-3">
-                    <span className="text-slate-700 font-medium">Frequency:</span>
-                    {[15, 30, 45, 60].map((days) => (
-                      <button
-                        key={days}
-                        onClick={() => setSubFrequencyDays(days)}
-                        className={`px-2.5 py-1 rounded-lg font-bold text-[11px] ${
-                          subFrequencyDays === days
-                            ? 'bg-amber-600 text-white'
-                            : 'bg-white text-slate-800 border border-amber-200'
-                        }`}
-                      >
-                        Every {days} Days
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+                  {isSubscribeMode && (
+                    <div className="pt-2 border-t border-amber-200/60 flex items-center gap-3">
+                      <span className="text-slate-700 font-medium">Frequency:</span>
+                      {[15, 30, 45, 60].map((days) => (
+                        <button
+                          key={days}
+                          onClick={() => setSubFrequencyDays(days)}
+                          className={`px-2.5 py-1 rounded-lg font-bold text-[11px] ${
+                            subFrequencyDays === days
+                              ? 'bg-amber-600 text-white'
+                              : 'bg-white text-slate-800 border border-amber-200'
+                          }`}
+                        >
+                          Every {days} Days
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="grid grid-cols-2 gap-3 pt-2">
@@ -229,12 +264,13 @@ export const ProductDetailModal: React.FC = () => {
             </div>
           </div>
 
-          {/* Bottom Tabs Section: Description, Nutrition, Feeding, Reviews */}
+          {/* Bottom Tabs. A sprayer has no nutritional analysis and no feeding rate,
+              so those tabs are only offered for things that are consumed. */}
           <div className="border-t border-slate-200 pt-6">
             <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto scrollbar-none">
               <button
                 onClick={() => setActiveTab('desc')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === 'desc'
                     ? 'bg-emerald-800 text-white'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
@@ -242,35 +278,52 @@ export const ProductDetailModal: React.FC = () => {
               >
                 Description & Benefits
               </button>
-              <button
-                onClick={() => setActiveTab('nutrition')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                  activeTab === 'nutrition'
-                    ? 'bg-emerald-800 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                Nutritional Breakdown
-              </button>
-              <button
-                onClick={() => setActiveTab('feeding')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
-                  activeTab === 'feeding'
-                    ? 'bg-emerald-800 text-white'
-                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                }`}
-              >
-                Feeding Guidelines
-              </button>
+              {consumable ? (
+                <>
+                  <button
+                    onClick={() => setActiveTab('nutrition')}
+                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                      activeTab === 'nutrition'
+                        ? 'bg-emerald-800 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Nutritional Breakdown
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('usage')}
+                    className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                      activeTab === 'usage'
+                        ? 'bg-emerald-800 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {selectedProduct.category === 'Veterinary Care' || selectedProduct.category === 'Dairy Hygiene'
+                      ? 'Usage & Dosage'
+                      : 'Feeding Guidelines'}
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setActiveTab('usage')}
+                  className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'usage'
+                      ? 'bg-emerald-800 text-white'
+                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  How To Use
+                </button>
+              )}
               <button
                 onClick={() => setActiveTab('reviews')}
-                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer ${
+                className={`px-4 py-2 text-xs font-bold rounded-xl transition-all cursor-pointer whitespace-nowrap ${
                   activeTab === 'reviews'
                     ? 'bg-emerald-800 text-white'
                     : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
                 }`}
               >
-                Farmer Reviews ({selectedProduct.reviewCount})
+                Reviews ({selectedProduct.reviewCount})
               </button>
             </div>
 
@@ -334,18 +387,20 @@ export const ProductDetailModal: React.FC = () => {
               </div>
             )}
 
-            {/* Tab 3: Feeding Guidelines */}
-            {activeTab === 'feeding' && (
+            {/* Tab 3: Feeding guidelines / How to use */}
+            {activeTab === 'usage' && (
               <div className="pt-5 space-y-4 text-xs sm:text-sm text-slate-700">
                 <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 font-medium text-emerald-900">
                   <div className="font-bold mb-1 flex items-center gap-1.5">
                     <Info className="w-4 h-4 text-emerald-700" />
-                    Recommended Dosage Instructions
+                    {consumable ? 'Recommended Dosage Instructions' : 'How To Use'}
                   </div>
                   <p>{selectedProduct.feedingInstructions}</p>
                 </div>
 
-                <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Raw Ingredients Used:</h4>
+                <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">
+                  {consumable ? 'Raw Ingredients Used:' : 'Materials & Build:'}
+                </h4>
                 <div className="flex flex-wrap gap-2">
                   {selectedProduct.ingredients.map((ing, i) => (
                     <span
@@ -356,6 +411,22 @@ export const ProductDetailModal: React.FC = () => {
                     </span>
                   ))}
                 </div>
+
+                {!consumable && selectedProduct.tags.length > 0 && (
+                  <>
+                    <h4 className="font-bold text-slate-900 text-xs uppercase tracking-wider">Highlights:</h4>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedProduct.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="bg-emerald-50 text-emerald-800 text-xs font-semibold px-3 py-1 rounded-lg border border-emerald-200"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -369,7 +440,10 @@ export const ProductDetailModal: React.FC = () => {
                     <div className="text-[10px] text-slate-500 mt-1">{selectedProduct.reviewCount} Ratings</div>
                   </div>
                   <div className="text-xs text-slate-600 leading-relaxed border-l border-slate-200 pl-4">
-                    <strong>100% Verified Dairy Farmer Reviews.</strong> Tested across high-yielding HF cows and Murrah buffalo breeds.
+                    <strong>100% Verified Farmer Reviews.</strong>{' '}
+                    {consumable
+                      ? 'Tested across high-yielding HF cows and Murrah buffalo breeds.'
+                      : 'Reported by dairy farmers and field crews across the region.'}
                   </div>
                 </div>
               </div>

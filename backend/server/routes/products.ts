@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { isDbConfigured, query, DbUnavailableError } from '../db';
-import type { NutritionalInfo, Product, ProductCategory } from '../../../frontend/src/types';
+import type { NutritionalInfo, Product, ProductCategory, ProductUnit } from '../../../frontend/src/types';
 
 export const productsRouter = Router();
 
@@ -38,6 +38,7 @@ const VARIANTS_JSON = `
   COALESCE((
     SELECT json_agg(json_build_object(
       'weightKg', v.weight_kg,
+      'unit', v.unit,
       'price', v.price,
       'stock', v.stock
     ) ORDER BY v.weight_kg)
@@ -48,10 +49,10 @@ const VARIANTS_JSON = `
 
 /** Columns are aliased to the camelCase names the UI already uses. */
 const PRODUCT_COLUMNS = `
-  p.id, p.name, p.brand, p.category_id, p.description, p.suitable_for,
-  p.nutritional_info, p.ingredients, p.feeding_instructions, p.benefits,
+  p.id, p.name, p.brand, p.category_id, p.description, p.suitable_for, p.tags,
+  p.nutritional_info, p.ingredients, p.feeding_instructions, p.benefits, p.highlights,
   p.image, p.price, p.original_price, p.discount_percent, p.rating,
-  p.review_count, p.stock_count, p.min_stock_level, p.sku, p.batch_number,
+  p.review_count, p.stock_count, p.min_stock_level, p.sku, p.batch_number, p.unit,
   -- Cast to text on purpose. pg turns a DATE into a local-midnight Date, which
   -- JSON-serialises back a day earlier in any timezone ahead of UTC, so an
   -- expiry of 2027-02-01 would reach the browser as 2027-01-31.
@@ -67,15 +68,18 @@ interface ProductRow {
   category_id: string;
   description: string;
   suitable_for: string[];
+  tags: string[];
   nutritional_info: NutritionalInfo;
   ingredients: string[];
   feeding_instructions: string;
   benefits: string[];
+  highlights: string[];
   image: string | null;
   price: string;
   original_price: string;
   discount_percent: number;
   default_weight_kg: string | null;
+  unit: ProductUnit;
   rating: string;
   review_count: number;
   stock_count: number;
@@ -85,7 +89,7 @@ interface ProductRow {
   expiry_date: string | null;
   is_best_seller: boolean;
   is_recommended: boolean;
-  variants: { weightKg: number; price: number; stock: number }[];
+  variants: { weightKg: number; unit: ProductUnit; price: number; stock: number }[];
 }
 
 /**
@@ -105,13 +109,16 @@ function toProduct(row: ProductRow): Product {
     brand: row.brand,
     category: row.category_id as ProductCategory,
     suitableFor: row.suitable_for as Product['suitableFor'],
+    tags: row.tags ?? [],
     description: row.description,
     nutritionalInfo: row.nutritional_info,
     ingredients: row.ingredients,
     feedingInstructions: row.feeding_instructions,
     benefits: row.benefits,
+    highlights: row.highlights ?? row.benefits.slice(0, 3),
     weightOptions,
     selectedWeightKg: defaultVariant?.weightKg ?? 0,
+    unit: row.unit ?? 'kg',
     price: Number(row.price),
     originalPrice: Number(row.original_price),
     discountPercent: row.discount_percent,

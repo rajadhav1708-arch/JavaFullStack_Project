@@ -14,6 +14,7 @@ export default defineConfig(() => {
     },
     server: {
       port: 3000,
+      allowedHosts: ['utilization-labour-mentioned-fields.trycloudflare.com'],
       proxy: {
         '/api': {
           target: `http://localhost:${process.env.PORT ?? 3001}`,

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { MOCK_SALES_ANALYTICS } from '../../data/mockData';
 import { BarChart3, PieChart, ArrowUpRight } from 'lucide-react';
 
 export const SalesAnalytics: React.FC = () => {
   const [timeframe, setTimeframe] = useState<'today' | 'week' | 'month' | 'year'>('month');
+
+  const emptyTrend: { day: string; sales: number; orders: number }[] = [];
+  const emptyCategories: { name: string; percentage: number; color: string }[] = [];
 
   return (
     <div className="space-y-6">
@@ -12,7 +14,7 @@ export const SalesAnalytics: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-900">Sales & Revenue Analytics</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Detailed performance tracking across feed categories, top cattle brands, and revenue growth.
+            Analytics populate from real orders once they are placed through the shop.
           </p>
         </div>
 
@@ -36,11 +38,11 @@ export const SalesAnalytics: React.FC = () => {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
           <div className="text-xs font-bold text-slate-500">Gross Monthly Sales</div>
           <div className="text-2xl font-black text-slate-900 mt-1">
-            ₹{MOCK_SALES_ANALYTICS.monthlyRevenue.toLocaleString('en-IN')}
+            ₹0
           </div>
           <div className="text-[11px] font-bold text-emerald-700 flex items-center gap-1 mt-1">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            <span>+{MOCK_SALES_ANALYTICS.monthlyRevenueGrowthPercent}% vs previous period</span>
+            <span>+0% vs previous period</span>
           </div>
         </div>
 
@@ -70,7 +72,7 @@ export const SalesAnalytics: React.FC = () => {
         {/* Visual Bar Chart */}
         <div className="pt-6 pb-2">
           <div className="h-48 flex items-end justify-between gap-3 px-2 border-b border-slate-200">
-            {MOCK_SALES_ANALYTICS.dailySalesTrend.map((d, idx) => {
+            {emptyTrend.map((d, idx) => {
               const maxVal = 60000;
               const heightPercent = Math.round((d.sales / maxVal) * 100);
 
@@ -101,7 +103,7 @@ export const SalesAnalytics: React.FC = () => {
         </div>
 
         <div className="space-y-3">
-          {MOCK_SALES_ANALYTICS.categoryShare.map((cat, idx) => (
+          {emptyCategories.map((cat, idx) => (
             <div key={idx} className="space-y-1">
               <div className="flex justify-between text-xs font-bold">
                 <span className="text-slate-800">{cat.name}</span>

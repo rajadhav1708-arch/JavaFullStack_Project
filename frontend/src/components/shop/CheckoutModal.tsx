@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ShippingAddress, Order } from '../../types';
+import { summariseCartUnits } from '../../utils/variants';
 import {
   MapPin,
   Truck,
@@ -50,7 +51,8 @@ export const CheckoutModal: React.FC = () => {
   const [isPlacing, setIsPlacing] = useState(false);
   const [placeError, setPlaceError] = useState<string | null>(null);
 
-  const totalWeightKg = cart.reduce((acc, item) => acc + item.weightKg * item.quantity, 0);
+  // Grouped by unit: kilograms, litres and pieces cannot be added together.
+  const cartUnits = summariseCartUnits(cart);
   const deliveryFee = deliveryType === 'Express Tractor Express' ? 250 : 0;
   const finalAmount = cartTotal + deliveryFee;
 
@@ -204,7 +206,9 @@ export const CheckoutModal: React.FC = () => {
               <Truck className="w-6 h-6 text-emerald-700" />
               <div>
                 <h2 className="text-xl font-bold text-slate-900">Step 2: Delivery Option</h2>
-                <p className="text-xs text-slate-500">Choose how your feed bags ({totalWeightKg} kg) will be delivered.</p>
+                <p className="text-xs text-slate-500">
+                  Choose how your order ({cartUnits.join(' · ')}) will be delivered.
+                </p>
               </div>
             </div>
 
@@ -243,7 +247,7 @@ export const CheckoutModal: React.FC = () => {
                   </div>
                   <div>
                     <div className="font-bold text-slate-900 text-sm">Express Tractor-Trolley Delivery</div>
-                    <div className="text-xs text-slate-500">Same-day urgent priority dispatch for bulk feed bags</div>
+                    <div className="text-xs text-slate-500">Same-day urgent priority dispatch for bulk orders</div>
                   </div>
                 </div>
                 <span className="font-bold text-slate-900 text-xs">₹250</span>

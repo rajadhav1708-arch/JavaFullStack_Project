@@ -47,7 +47,29 @@ export type ProductCategory =
   | 'Protein & Bypass Fat'
   | 'Feed Pellets & Concentrates'
   | 'Silage & Fodder'
-  | 'Veterinary Care';
+  | 'Veterinary Care'
+  // Non-consumables. The catalogue covers hardware and machinery as well as
+  // feed, so these sit alongside the nutrition categories rather than under
+  // a separate top-level grouping.
+  | 'Dairy Equipment'
+  | 'Dairy Hygiene'
+  | 'Animal Husbandry'
+  | 'Farm Hardware'
+  | 'Field Equipment';
+
+/**
+ * A pack size or quantity, with the unit its label should use. `weightKg` is
+ * deliberately not renamed: it predates this change and already stored litres
+ * (5) and bale weights (500) rather than kilograms.
+ */
+export type ProductUnit = 'kg' | 'g' | 'L' | 'ml' | 'unit' | 'pcs' | 'pack' | 'coil' | 'box' | 'set' | 'roll' | 'metre';
+
+export interface ProductVariant {
+  weightKg: number;
+  unit: ProductUnit;
+  price: number;
+  stock: number;
+}
 
 export interface NutritionalInfo {
   crudeProtein: string;
@@ -75,14 +97,25 @@ export interface Product {
   name: string;
   brand: string;
   category: ProductCategory;
+  /**
+   * Animal this product is fed to. Empty for hardware and machinery, which
+   * would otherwise have to falsely claim to suit a cow to pass the animal
+   * filter. `tags` carries the descriptor those products show instead.
+   */
   suitableFor: ('Cow' | 'Buffalo' | 'Calf' | 'Pregnant Heifer')[];
+  /** Product descriptor chips, shown when there is no animal to show. */
+  tags: string[];
   description: string;
   nutritionalInfo: NutritionalInfo;
   ingredients: string[];
   feedingInstructions: string;
   benefits: string[];
-  weightOptions: { weightKg: number; price: number; stock: number }[];
+  /** The three feature bullets a product card shows above the price. */
+  highlights: string[];
+  weightOptions: ProductVariant[];
   selectedWeightKg: number;
+  /** Default unit for this product, used when a variant predates the column. */
+  unit: ProductUnit;
   price: number;
   originalPrice: number;
   discountPercent: number;
@@ -95,6 +128,8 @@ export interface Product {
   batchNumber: string;
   expiryDate: string;
   image: string;
+  /** Full-size image for the detail modal, when a larger derivative exists. */
+  detailImage?: string;
   isBestSeller?: boolean;
   isRecommended?: boolean;
 }
@@ -141,6 +176,7 @@ export interface OrderItem {
   productName: string;
   brand: string;
   weightKg: number;
+  unit: ProductUnit;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -180,6 +216,8 @@ export interface KhataRecord {
   customerName: string;
   phone: string;
   village: string;
+  /** Member number at the village milk union, when the farmer has one. */
+  milkUnionMemberId?: string;
   totalCreditLimit: number;
   totalOutstanding: number;
   paidAmount: number;

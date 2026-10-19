@@ -1,5 +1,4 @@
 import React from 'react';
-import { MOCK_REVIEWS } from '../../data/mockData';
 import { useInView, useScrollProgress, parallaxOffset } from '../../hooks/useScrollProgress';
 import { RatingStars } from '../common/RatingStars';
 import { Quote, CheckCircle2, TrendingUp } from 'lucide-react';
@@ -10,6 +9,8 @@ export const TestimonialsSection: React.FC = () => {
   const section = useInView<HTMLElement>();
   const { ref: headingRef, progress } = useScrollProgress<HTMLDivElement>(section.inView);
   const headingOffset = parallaxOffset(progress, HEADING_TRAVEL);
+
+  const emptyReviews: { id: string; author: string; location: string; rating: number; date: string; comment: string; verifiedFarmer: boolean; farmSize?: string }[] = [];
 
   return (
     <section ref={section.ref} className="py-16 bg-transparent text-white border-t border-white/10 relative z-10">
@@ -34,7 +35,7 @@ export const TestimonialsSection: React.FC = () => {
         {/* Cards are not parallaxed, for the grid-alignment reason noted in
             FarmerServicesSection. */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {MOCK_REVIEWS.map((rev, index) => {
+          {emptyReviews.map((rev, index) => {
             return (
               <div
                 key={rev.id}

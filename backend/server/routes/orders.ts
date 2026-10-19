@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { isDbConfigured, pool, DbUnavailableError } from '../db';
 import { currentUser, type SessionUser } from '../auth';
+import type { ProductUnit } from '../../../frontend/src/types';
 
 export const ordersRouter = Router();
 
@@ -69,6 +70,7 @@ interface ItemRow {
   product_name: string;
   brand: string;
   weight_kg: string;
+  unit: ProductUnit;
   quantity: number;
   unit_price: string;
   total_price: string;
@@ -88,6 +90,7 @@ function toOrder(row: OrderRow, items: ItemRow[]) {
       productName: i.product_name,
       brand: i.brand,
       weightKg: Number(i.weight_kg),
+      unit: i.unit ?? 'kg',
       quantity: i.quantity,
       unitPrice: Number(i.unit_price),
       totalPrice: Number(i.total_price),
@@ -204,11 +207,11 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
       await client.query('BEGIN');
 
       let subtotal = 0;
-      const lines: { product_id: string; product_name: string; brand: string; weight_kg: number; quantity: number; unit_price: number; total_price: number; image: string | null }[] = [];
+      const lines: { product_id: string; product_name: string; brand: string; weight_kg: number; unit: ProductUnit; quantity: number; unit_price: number; total_price: number; image: string | null }[] = [];
 
       for (const item of wanted.values()) {
-        const variantRows = await client.query<{ price: string; stock: number; name: string; brand: string; image: string | null }>(
-          `SELECT pv.price, pv.stock, p.name, p.brand, p.image
+        const variantRows = await client.query<{ price: string; stock: number; name: string; brand: string; image: string | null; unit: ProductUnit }>(
+          `SELECT pv.price, pv.stock, pv.unit, p.name, p.brand, p.image
            FROM product_variants pv JOIN products p ON p.id = pv.product_id
            WHERE pv.product_id = $1 AND pv.weight_kg = $2
            FOR UPDATE OF pv`,
@@ -217,12 +220,15 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
         const variant = variantRows.rows[0];
         if (!variant) {
           await client.query('ROLLBACK');
-          res.status(404).json({ error: 'NOT_FOUND', message: `Product ${item.productId} (${item.weightKg}kg) no longer exists.` });
+          res.status(404).json({ error: 'NOT_FOUND', message: `Product ${item.productId} (${item.weightKg} kg) no longer exists.` });
           return;
         }
+        // The unit comes from the variant, not the request, so a client cannot
+        // label a sprayer as kilograms and have it written to the order.
+        const pack = `${item.weightKg} ${variant.unit ?? 'kg'}`;
         if (variant.stock < item.quantity) {
           await client.query('ROLLBACK');
-          res.status(409).json({ error: 'INSUFFICIENT_STOCK', message: `Only ${variant.stock} pack(s) of ${variant.name} (${item.weightKg}kg) left in stock.` });
+          res.status(409).json({ error: 'INSUFFICIENT_STOCK', message: `Only ${variant.stock} pack(s) of ${variant.name} (${pack}) left in stock.` });
           return;
         }
         const unitPrice = Number(variant.price);
@@ -232,6 +238,7 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
           product_name: variant.name,
           brand: variant.brand,
           weight_kg: item.weightKg,
+          unit: variant.unit ?? 'kg',
           quantity: item.quantity,
           unit_price: unitPrice,
           total_price: unitPrice * item.quantity,
@@ -247,6 +254,45 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
       const totalAmount = Math.round((taxBase + deliveryCharge + tax) * 100) / 100;
 
       const paymentStatus = body.paymentMethod === 'Khata Credit' ? 'Khata Due' : body.paymentMethod === 'Cash on Delivery' ? 'Pending' : 'Paid';
+
+      // Credit is the shop's money, so the limit is checked here rather than in
+      // the browser. This runs before the order row is written so a rejected
+      // order leaves no trace, and it reuses the same transaction so the check
+      // and the charge cannot disagree.
+      let khataAccountId: number | null = null;
+      if (body.paymentMethod === 'Khata Credit') {
+        const account = await client.query<{ id: number; credit_limit: string; outstanding: string }>(
+          `SELECT a.id, a.credit_limit,
+                  COALESCE(SUM(CASE WHEN e.entry_type = 'Purchase' THEN e.amount ELSE -e.amount END), 0) AS outstanding
+           FROM khata_accounts a
+           LEFT JOIN khata_entries e ON e.account_id = a.id
+           WHERE a.user_id = $1
+           GROUP BY a.id`,
+          [user.id]
+        );
+        const khata = account.rows[0];
+        if (!khata) {
+          await client.query('ROLLBACK');
+          res.status(403).json({
+            error: 'NO_KHATA_ACCOUNT',
+            message: 'Khata Credit needs a credit account opened by the shop. Please pay at the counter.',
+          });
+          return;
+        }
+        const outstanding = Number(khata.outstanding);
+        const limit = Number(khata.credit_limit);
+        if (outstanding + totalAmount > limit) {
+          await client.query('ROLLBACK');
+          res.status(409).json({
+            error: 'CREDIT_LIMIT_EXCEEDED',
+            message:
+              `This order of Rs ${totalAmount} would take the Khata balance to Rs ` +
+              `${Math.round((outstanding + totalAmount) * 100) / 100}, over the approved limit of Rs ${limit}.`,
+          });
+          return;
+        }
+        khataAccountId = khata.id;
+      }
 
       const insertOrder = await client.query<{ id: number }>(
         `INSERT INTO orders (order_number, user_id, customer_name, customer_phone, customer_village,
@@ -276,9 +322,9 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
 
       for (const line of lines) {
         await client.query(
-          `INSERT INTO order_items (order_id, product_id, product_name, brand, weight_kg, quantity, unit_price, total_price, image)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [orderId, line.product_id, line.product_name, line.brand, line.weight_kg, line.quantity, line.unit_price, line.total_price, line.image]
+          `INSERT INTO order_items (order_id, product_id, product_name, brand, weight_kg, unit, quantity, unit_price, total_price, image)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+          [orderId, line.product_id, line.product_name, line.brand, line.weight_kg, line.unit, line.quantity, line.unit_price, line.total_price, line.image]
         );
         await client.query(
           'UPDATE product_variants SET stock = stock - $1 WHERE product_id = $2 AND weight_kg = $3',
@@ -289,6 +335,24 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
         await client.query(
           'UPDATE products SET stock_count = GREATEST(0, stock_count - $1) WHERE id = $2',
           [line.quantity, line.product_id]
+        );
+      }
+
+      // The charge lands in the ledger in the SAME transaction as the order. If
+      // this fails the order rolls back too, so a farmer is never billed on the
+      // Khata for goods that were never committed to stock. The unique index on
+      // (order_id, entry_type) makes a retried checkout idempotent here.
+      if (khataAccountId !== null) {
+        await client.query(
+          `INSERT INTO khata_entries (account_id, entry_type, amount, notes, order_id)
+           VALUES ($1, 'Purchase', $2, $3, $4)
+           ON CONFLICT (order_id, entry_type) DO NOTHING`,
+          [
+            khataAccountId,
+            totalAmount,
+            `${lines.length} item(s) on Khata Credit (${orderNumber})`,
+            orderId,
+          ]
         );
       }
 
