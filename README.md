@@ -8,6 +8,8 @@ calculator, and an AI feed assistant (Gemini).
 Storefront branding, contact details and WhatsApp deep links come from a
 single source of truth: `frontend/src/data/store.ts`.
 
+Live site: https://hindavitraders.vercel.app
+
 ## Stack
 
 | Layer | Choice |
