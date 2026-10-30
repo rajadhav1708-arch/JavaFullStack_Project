@@ -1,5 +1,159 @@
 @import "tailwindcss";
 
+/* Hindavi Traders design tokens: warm paper, deep pine, ochre accent.
+   The palette is deliberately close to a printed farm ledger rather than a
+   generic SaaS dashboard. */
+@theme {
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, "Times New Roman", serif;
+
+  --color-cream: #f7f2e7;
+  --color-paper: #fffdf7;
+  --color-ink: #1b2a22;
+  --color-ink-soft: #55635b;
+  --color-pine: #1f4d3a;
+  --color-pine-deep: #14382a;
+  --color-pine-soft: #e7efe8;
+  --color-ochre: #c8842a;
+  --color-ochre-soft: #f4e7cd;
+  --color-clay: #b4552d;
+  --color-line: #e3dac8;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-cream);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    background-image:
+      radial-gradient(60rem 40rem at 110% -10%, rgba(200, 132, 42, 0.08), transparent 60%),
+      radial-gradient(50rem 30rem at -10% 0%, rgba(31, 77, 58, 0.07), transparent 55%);
+    background-attachment: fixed;
+  }
+
+  h1,
+  h2,
+  h3,
+  .font-display {
+    font-family: var(--font-display);
+    font-optical-sizing: auto;
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: var(--color-ochre);
+    color: #fffdf7;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ochre);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--color-pine);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: 9999px;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    line-height: 1;
+    padding: 0.8rem 1.25rem;
+    transition:
+      background-color 0.2s ease,
+      color 0.2s ease,
+      border-color 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+    cursor: pointer;
+  }
+
+  .btn:active {
+    transform: translateY(1px);
+  }
+
+  .btn-primary {
+    background-color: var(--color-pine);
+    color: var(--color-cream);
+    box-shadow: 0 10px 24px -14px rgba(20, 56, 42, 0.7);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--color-pine-deep);
+  }
+
+  .btn-accent {
+    background-color: var(--color-ochre);
+    color: #fffdf7;
+    box-shadow: 0 10px 24px -14px rgba(200, 132, 42, 0.8);
+  }
+
+  .btn-accent:hover {
+    background-color: #b3721f;
+  }
+
+  .btn-outline {
+    border: 1px solid var(--color-line);
+    background-color: transparent;
+    color: var(--color-ink);
+  }
+
+  .btn-outline:hover {
+    border-color: var(--color-pine);
+    background-color: var(--color-pine-soft);
+  }
+
+  .card {
+    background-color: var(--color-paper);
+    border: 1px solid var(--color-line);
+    border-radius: 1.25rem;
+    box-shadow: 0 20px 40px -32px rgba(27, 42, 34, 0.45);
+  }
+
+  .field {
+    width: 100%;
+    border-radius: 0.85rem;
+    border: 1px solid var(--color-line);
+    background-color: var(--color-paper);
+    padding: 0.7rem 0.95rem;
+    font-size: 0.875rem;
+    color: var(--color-ink);
+    outline: none;
+    transition:
+      border-color 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+
+  .field::placeholder {
+    color: #98a29b;
+  }
+
+  .field:focus {
+    border-color: var(--color-pine);
+    box-shadow: 0 0 0 3px rgba(31, 77, 58, 0.12);
+  }
+}
+
 @keyframes scroll-vertical {
   0% {
     transform: translateY(0%);
@@ -53,42 +207,76 @@
   animation: spin-slow 12s linear infinite;
 }
 
-/* Scroll reveal: panels start blurred and sunk, then ease in. The
+/* Scroll reveal: panels start soft and sunk, then ease in. The
    IntersectionObserver in useRevealOnScroll adds .is-visible. */
 [data-reveal] {
   opacity: 0;
-  transform: translate3d(0, 32px, 0);
-  filter: blur(6px);
+  transform: translate3d(0, 24px, 0);
   transition:
     opacity 0.7s ease,
     transform 0.7s cubic-bezier(0.22, 1, 0.36, 1),
     filter 0.7s ease;
-  will-change: opacity, transform, filter;
 }
 
 [data-reveal].is-visible {
   opacity: 1;
   transform: translate3d(0, 0, 0);
-  filter: blur(0);
 }
 
 @media (prefers-reduced-motion: reduce) {
   [data-reveal] {
     opacity: 1;
     transform: none;
-    filter: none;
     transition: none;
+  }
+
+  html {
+    scroll-behavior: auto;
   }
 }
 
-/* Theme choices from My Account. `dark` is the default; dim and contrast are
-   device-level nudges, not a second stylesheet. */
+/* Theme choices from My Account. `dim` and `contrast` are device-level
+   nudges, not a second stylesheet. */
 html.theme-dim body {
   filter: brightness(0.86);
 }
 
 html.theme-contrast body {
   filter: contrast(1.16) saturate(1.15);
+}
+
+/* ---- Parallax scene hand-off -------------------------------------- */
+/* ScrollAnimationBackground holds html[data-parallax-done] = 'false' while
+   the hero scene plays. Main content below the hero is held back until the
+   scene completes, then eases in. No attribute at all = visible (JS/scene
+   absent, other routes, after navigation cleanup). */
+
+html[data-parallax-done='false'] .home-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+}
+
+html[data-parallax-done='true'] .home-reveal {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 700ms ease,
+    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html .home-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+@media print {
+  .home-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
 }
 
 /* Thin scroll progress line pinned to the very top of the viewport. */
@@ -107,3 +295,74 @@ html.theme-contrast body {
   scrollbar-width: none;
 }
 
+/* ------------------------------------------------------------------ */
+/* Bill / invoice printing                                            */
+/* ------------------------------------------------------------------ */
+/* Browser "Save as PDF" serialises the whole page. Fixed chrome (chat
+   widget, header, toasts, scroll bar) would otherwise print on every
+   page. `.no-print` is stripped entirely; `.print-area` is what remains
+   when body has .printing-bill (set by utils/printBill.ts). */
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body {
+    background: #fff !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Ordinary Ctrl+P (no printing-bill class): still drop the floating
+     chrome so a full-page print never shows the chat bubble. */
+  body:not(.printing-bill) header,
+  body:not(.printing-bill) footer,
+  body:not(.printing-bill) #scroll-progress-bar {
+    display: none !important;
+  }
+
+  body.printing-bill * {
+    visibility: hidden !important;
+  }
+
+  body.printing-bill .print-area,
+  body.printing-bill .print-area * {
+    visibility: visible !important;
+  }
+
+  /* Collapse the app shell so hidden on-screen content cannot create blank pages. */
+  body.printing-bill .app-shell {
+    min-height: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    display: block !important;
+    background: #fff !important;
+  }
+
+  body.printing-bill .print-area {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    right: auto !important;
+    bottom: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 10mm !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    border: 1px solid #e3dac8 !important;
+    transform: none !important;
+    opacity: 1 !important;
+    overflow: visible !important;
+    max-height: none !important;
+  }
+
+  body.printing-bill .print-backdrop {
+    display: none !important;
+  }
+}

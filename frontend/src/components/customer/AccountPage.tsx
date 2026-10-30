@@ -1,41 +1,30 @@
 import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
-
-type Theme = 'dark' | 'dim' | 'contrast';
-
-function applyTheme(theme: Theme): void {
-  const el = document.documentElement;
-  el.classList.remove('theme-dark', 'theme-dim', 'theme-contrast');
-  el.classList.add(`theme-${theme}`);
-  window.localStorage.setItem('pashufeed_theme', theme);
-}
+import { useApp } from '../../context/AppContext';
+import { User, MapPin, Languages, LogOut, Check } from 'lucide-react';
 
 /**
  * Shared account page for both dashboards. The owner and the farmer land here
  * from the "My Account" entry in the user dropdown.
  */
 export const AccountPage: React.FC = () => {
-  const { user, updateUser, openAuthModal, logout } = useAuth();
+  const { user, updateUser, logout } = useAuth();
   const { language, setLanguage } = useLanguage();
+  const { setCurrentView } = useApp();
 
   const [name, setName] = useState(user?.name ?? '');
   const [village, setVillage] = useState(user?.village ?? '');
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [theme, setTheme] = useState<Theme>(
-    () => (window.localStorage.getItem('pashufeed_theme') as Theme) || 'dark'
-  );
 
   if (!user) {
     return (
-      <div className="max-w-xl mx-auto p-10 text-center text-white">
-        <p className="text-slate-300">Sign in to manage your account.</p>
-        <button
-          onClick={() => openAuthModal()}
-          className="mt-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-6 py-3 rounded-2xl cursor-pointer"
-        >
-          Sign in
+      <div className="mx-auto max-w-xl px-4 py-16 text-center">
+        <p className="text-sm text-ink-soft">Sign in to manage your account.</p>
+        <button onClick={() => setCurrentView('home')} className="btn btn-primary mt-4">
+          Go to the shop
         </button>
       </div>
     );
@@ -43,77 +32,105 @@ export const AccountPage: React.FC = () => {
 
   const save = async (): Promise<void> => {
     setError(null);
-    const res = await fetch('/api/auth/me', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, village }),
-    });
-    const body = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(body.message ?? 'Could not save.');
+    if (!name.trim()) {
+      setError('Name cannot be empty.');
       return;
     }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-    // Push the freshly-saved profile into the rest of the UI.
-    updateUser((body as { user: typeof user }).user);
+
+    setSaving(true);
+    try {
+      const res = await fetch('/api/auth/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), village: village.trim() }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError((body as { message?: string }).message ?? 'Could not save your changes.');
+        return;
+      }
+      updateUser((body as { user: typeof user }).user);
+      setSaved(true);
+      window.setTimeout(() => setSaved(false), 2500);
+    } catch {
+      setError('Could not reach the server. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const languages = [
+    { code: 'en', label: 'English' },
+    { code: 'hi', label: 'हिन्दी' },
+    { code: 'mr', label: 'मराठी' },
+  ] as const;
+
   return (
-    <div className="max-w-3xl mx-auto px-4 py-10 text-white space-y-6">
-      <h1 className="text-2xl sm:text-3xl font-black tracking-tight">My Account</h1>
+    <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
+      <div>
+        <p className="eyebrow">Account</p>
+        <h1 className="mt-2 text-2xl text-ink sm:text-3xl">My details</h1>
+      </div>
 
-      <section className="bg-slate-900/40 border border-slate-700/60 rounded-3xl p-6 space-y-4">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Profile</h2>
-        <label className="block text-xs text-slate-400">Full name</label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full bg-slate-950/60 border border-slate-700 rounded-xl p-3 text-white text-sm font-semibold outline-none focus:border-emerald-500"
-        />
-        <label className="block text-xs text-slate-400">Village / Town</label>
-        <input
-          value={village}
-          onChange={(e) => setVillage(e.target.value)}
-          className="w-full bg-slate-950/60 border border-slate-700 rounded-xl p-3 text-white text-sm font-semibold outline-none focus:border-emerald-500"
-        />
-        <div className="flex items-center gap-3">
-          <button onClick={save} className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-6 py-3 rounded-2xl cursor-pointer">
-            Save changes
+      <section className="card space-y-4 p-6">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+          <User className="h-4 w-4 text-pine" />
+          Profile
+        </h2>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">Full name</span>
+            <input value={name} onChange={(event) => setName(event.target.value)} className="field" autoComplete="name" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">Village / town</span>
+            <input value={village} onChange={(event) => setVillage(event.target.value)} className="field" autoComplete="address-level2" />
+          </label>
+          <div>
+            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">Customer ID (permanent)</span>
+            <p className="field bg-cream/70 font-mono font-bold text-pine">{user.customerCode}</p>
+          </div>
+          <div className="sm:col-span-2">
+            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">Email (optional)</span>
+            <p className="field bg-cream/70 text-ink-soft">{user.email || 'Not set — used only for password reset links'}</p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <button onClick={() => void save()} disabled={saving} className="btn btn-primary disabled:opacity-60">
+            {saving ? 'Saving…' : 'Save changes'}
           </button>
-          {saved && <span className="text-emerald-400 text-xs font-bold">Saved.</span>}
-          {error && <span className="text-red-400 text-xs font-bold">{error}</span>}
+          {saved && (
+            <span className="flex items-center gap-1 text-xs font-bold text-pine">
+              <Check className="h-3.5 w-3.5" />
+              Saved
+            </span>
+          )}
+          {error && <span className="text-xs font-bold text-clay">{error}</span>}
         </div>
-        <p className="text-[11px] text-slate-500">Role: {user.role} · {user.email}</p>
+
+        <p className="flex items-center gap-1.5 border-t border-line pt-3 text-[11px] text-ink-soft">
+          <MapPin className="h-3.5 w-3.5" />
+          Signed in as {user.role} · {user.customerCode}{user.email ? ` · ${user.email}` : ''}
+        </p>
       </section>
 
-      <section className="bg-slate-900/40 border border-slate-700/60 rounded-3xl p-6 space-y-3">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Appearance</h2>
-        <p className="text-xs text-slate-400">Theme applies across the app and is remembered on this device.</p>
-        <div className="flex gap-2">
-          {(['dark', 'dim', 'contrast'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => { setTheme(t); applyTheme(t); }}
-              className={`px-4 py-2 rounded-xl text-xs font-bold border cursor-pointer ${
-                theme === t ? 'bg-emerald-700 border-emerald-500 text-white' : 'bg-slate-950/60 border-slate-700 text-slate-300'
-              }`}
-            >
-              {t === 'dark' ? 'Dark' : t === 'dim' ? 'Dim' : 'High Contrast'}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="bg-slate-900/40 border border-slate-700/60 rounded-3xl p-6 space-y-3">
-        <h2 className="text-sm font-bold text-slate-300 uppercase tracking-wider">Language</h2>
-        <div className="flex gap-2">
-          {([['en', 'English'], ['hi', 'हिन्दी'], ['mr', 'मराठी']] as const).map(([code, label]) => (
+      <section className="card space-y-3 p-6">
+        <h2 className="flex items-center gap-2 text-sm font-bold text-ink">
+          <Languages className="h-4 w-4 text-pine" />
+          Language
+        </h2>
+        <p className="text-xs text-ink-soft">Labels across the shop are translated. Product names stay in English.</p>
+        <div className="flex flex-wrap gap-2">
+          {languages.map(({ code, label }) => (
             <button
               key={code}
               onClick={() => setLanguage(code)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold border cursor-pointer ${
-                language === code ? 'bg-emerald-700 border-emerald-500 text-white' : 'bg-slate-950/60 border-slate-700 text-slate-300'
+              className={`rounded-full border px-4 py-2 text-xs font-bold transition-colors ${
+                language === code
+                  ? 'border-pine bg-pine text-cream'
+                  : 'border-line bg-cream/50 text-ink-soft hover:border-pine/40 hover:text-ink'
               }`}
             >
               {label}
@@ -122,10 +139,8 @@ export const AccountPage: React.FC = () => {
         </div>
       </section>
 
-      <button
-        onClick={() => void logout()}
-        className="w-full bg-red-950/60 hover:bg-red-900/70 border border-red-500/40 text-red-300 font-bold text-xs py-3 rounded-2xl cursor-pointer"
-      >
+      <button onClick={() => void logout()} className="btn btn-outline w-full !border-clay/30 !py-3 text-clay hover:!bg-clay/5">
+        <LogOut className="h-4 w-4" />
         Sign out
       </button>
     </div>

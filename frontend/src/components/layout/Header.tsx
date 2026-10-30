@@ -3,481 +3,298 @@ import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { useNavigate } from 'react-router-dom';
+import { STORE } from '../../data/store';
 import {
   ShoppingBag,
   Search,
-  Heart,
-  Bell,
-  PhoneCall,
+  Phone,
   User,
-  ShieldCheck,
-  Store,
   Menu,
   X,
-  Truck,
-  Repeat,
-  Tag,
   ChevronDown,
   LayoutDashboard,
-  Calculator,
   LogOut,
+  ArrowUpRight,
 } from 'lucide-react';
+
+const NAV_LINKS = [
+  { path: '/home', labelKey: 'nav.home', view: 'home' },
+  { path: '/shop', labelKey: 'nav.shop', view: 'shop' },
+  { path: '/nutrition-quiz', labelKey: 'nav.quiz', view: 'nutrition-quiz' },
+  { path: '/services', labelKey: 'nav.services', view: 'services' },
+  { path: '/offers', labelKey: 'nav.offers', view: 'offers' },
+] as const;
 
 export const Header: React.FC = () => {
   const {
     currentView,
-    setCurrentView,
-    setAdminTab,
     cartItemCount,
-    wishlist,
     searchQuery,
     setSearchQuery,
     setIsCartDrawerOpen,
-    unreadNotificationCount,
-    notifications,
-    markNotificationAsRead,
   } = useApp();
 
   const { user, isLoading: isAuthLoading, redirectToLogin, logout } = useAuth();
   const { language, setLanguage, t } = useLanguage();
   const navigate = useNavigate();
 
-  const userRole = user?.role ?? 'customer';
-  const isStaff = userRole === 'admin' || userRole === 'employee';
+  const isStaff = user?.role === 'admin' || user?.role === 'employee';
+  const roleKey = user?.role === 'admin' ? 'role.admin' : user?.role === 'employee' ? 'role.employee' : 'role.customer';
+  const roleLabel = t(roleKey);
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isNotifDropdownOpen, setIsNotifDropdownOpen] = useState(false);
-  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
 
-  const roleLabel =
-    userRole === 'customer' ? 'Dairy Farmer' : userRole === 'admin' ? 'Shop Owner (Admin)' : 'Counter Staff';
-
-  const handleRoleChange = (role: 'customer' | 'admin' | 'employee') => {
-    setIsRoleDropdownOpen(false);
-    if (role === 'admin' || role === 'employee') {
-      navigate('/admin-dashboard');
-      setAdminTab(role === 'employee' ? 'pos' : 'overview');
-    } else {
-      navigate('/home');
-    }
+  const handleSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (searchQuery.trim()) navigate('/shop');
   };
 
-  const handleStaffArea = () => {
-    if (!user) {
-      redirectToLogin();
-      return;
-    }
-    handleRoleChange(userRole);
-  };
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate('/shop');
-    }
-  };
-
-  const goToView = (path: string) => {
+  const goTo = (path: string) => {
     navigate(path);
     setIsMobileMenuOpen(false);
+    setIsAccountMenuOpen(false);
   };
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-950/25 backdrop-blur-md text-slate-100 border-b border-white/10 shadow-lg">
-      {/* Top Banner Notice */}
-      <div className="bg-[#064e3b] text-[#a7f3d0] text-xs py-1.5 px-4">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <div className="flex items-center gap-2 text-center sm:text-left">
-            <Truck className="w-3.5 h-3.5 text-[#34d399] shrink-0" />
-            <span className="text-white">
-              <strong className="text-[#34d399]">Village Tractor Express Delivery</strong> within 24 hours | 🌾 Farmer Credit Khata Available
-            </span>
-          </div>
+    <header className="no-print sticky top-0 z-40 border-b border-line bg-cream/90 backdrop-blur-md">
+      <div className="bg-pine-deep text-cream">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-1.5 px-4 py-2 text-[11px] sm:flex-row sm:px-6 lg:px-8">
+          <p className="text-center text-cream/80 sm:text-left">
+            {t('header.gstNote')} <span className="mx-1.5 text-cream/40">·</span> {t('header.khataNote')}
+          </p>
 
-          <div className="flex items-center gap-4 text-xs">
-            {/* Language switcher */}
-            <div className="flex items-center gap-1 bg-black/20 rounded-full px-1 py-0.5">
+          <div className="flex items-center gap-4">
+            <a
+              href={STORE.phoneHref}
+              className="hidden items-center gap-1.5 text-cream/80 transition-colors hover:text-cream md:flex"
+            >
+              <Phone className="h-3 w-3" />
+              {STORE.phone}
+            </a>
+
+            <div className="flex items-center gap-1 rounded-full bg-black/15 p-0.5">
               {(['en', 'hi', 'mr'] as const).map((lang) => (
                 <button
                   key={lang}
                   onClick={() => setLanguage(lang)}
-                  className={`px-2 py-0.5 rounded-full font-bold uppercase transition-colors ${
-                    language === lang ? 'bg-emerald-500 text-white' : 'text-[#a7f3d0] hover:text-white'
+                  className={`rounded-full px-2 py-0.5 font-bold uppercase transition-colors ${
+                    language === lang ? 'bg-ochre text-white' : 'text-cream/70 hover:text-cream'
                   }`}
+                  aria-label={t('header.switchLang', { lang: lang.toUpperCase() })}
                 >
                   {lang}
                 </button>
               ))}
             </div>
-
-            <span className="hidden md:flex items-center gap-1.5 text-[#a7f3d0]">
-              <PhoneCall className="w-3 h-3 text-[#34d399]" />
-              Free Feed Helpline: 1800-425-3333
-            </span>
-
-            {/* Quick Role Switcher Pill */}
-            {!isAuthLoading && !user ? (
-              <button
-                onClick={() => redirectToLogin()}
-                className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1 rounded-full font-bold text-xs transition-colors cursor-pointer"
-              >
-                <User className="w-3 h-3" />
-                <span>{t('header.signin')}</span>
-              </button>
-            ) : !isAuthLoading && user ? (
-              <div className="relative">
-                <button
-                  onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                  className="flex items-center gap-1.5 bg-[#065f46] hover:bg-[#044a36] text-white px-2.5 py-0.5 rounded-full font-medium transition-colors cursor-pointer"
-                >
-                  <ShieldCheck className="w-3 h-3 text-amber-300" />
-                  <span className="max-w-[9rem] truncate">{user.name}</span>
-                  <span className="hidden sm:inline text-[#a7f3d0]">· {roleLabel}</span>
-                  <ChevronDown className="w-3 h-3" />
-                </button>
-
-                {isRoleDropdownOpen && (
-                  <div className="absolute right-0 mt-1.5 w-64 bg-white text-slate-800 rounded-xl shadow-xl border border-slate-200 py-2 z-50">
-                    <div className="px-3 py-2 border-b border-slate-100">
-                      <div className="text-sm font-black text-slate-900 truncate">{user.name}</div>
-                      <div className="text-[11px] text-slate-500 truncate">{user.email}</div>
-                      <div className="mt-1 inline-block text-[10px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-700 rounded-full px-2 py-0.5">
-                        {roleLabel}
-                      </div>
-                    </div>
-
-                    {isStaff && (
-                      <button
-                        onClick={() => handleStaffArea()}
-                        className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50"
-                      >
-                        <LayoutDashboard className="w-4 h-4 text-emerald-600" />
-                        <div>
-                          <div className="font-semibold">Shop Dashboard</div>
-                          <div className="text-[10px] text-slate-500">Analytics, Inventory, Khata, POS</div>
-                        </div>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => {
-                        setIsRoleDropdownOpen(false);
-                        navigate('/account');
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-slate-50"
-                    >
-                      <User className="w-4 h-4 text-emerald-600" />
-                      <div>
-                        <div className="font-semibold">My Account</div>
-                        <div className="text-[10px] text-slate-500">Profile, theme, language, sign out</div>
-                      </div>
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setIsRoleDropdownOpen(false);
-                        void logout();
-                      }}
-                      className="w-full text-left px-3 py-2 text-xs flex items-center gap-2 hover:bg-red-50 text-red-700 border-t border-slate-100"
-                    >
-                      <LogOut className="w-4 h-4" />
-                      <span className="font-semibold">Sign out</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="w-24 h-6 bg-white/10 rounded-full animate-pulse" />
-            )}
           </div>
         </div>
       </div>
 
-      {/* Main Header Navigation */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-20 gap-4">
-          {/* Logo */}
-          <div
-            onClick={() => {
-              if (userRole === 'customer') navigate('/home');
-              else navigate('/admin-dashboard');
-            }}
-            className="flex items-center gap-3 cursor-pointer group"
-          >
-            <div className="w-9 h-9 bg-[#10b981] rounded-lg flex items-center justify-center font-bold text-white text-lg group-hover:scale-105 transition-transform">
-              P
-            </div>
-            <div>
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-lg text-white tracking-tight">Hindavi Tradors</span>
-              </div>
-              <p className="text-[10px] font-medium text-slate-300 hidden sm:block">
-                Cattle Feed & Farm Inventory Hub
-              </p>
-            </div>
-          </div>
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex h-[4.5rem] items-center justify-between gap-4">
+          <button onClick={() => goTo('/home')} className="group flex shrink-0 items-center gap-2.5 text-left">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-pine font-display text-lg font-semibold text-cream transition-transform group-hover:-rotate-3">
+              H
+            </span>
+            <span className="leading-tight">
+              <span className="block font-display text-lg font-semibold tracking-tight text-ink">
+                {STORE.name}
+              </span>
+              <span className="hidden text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-soft sm:block">
+                {STORE.tagline}
+              </span>
+            </span>
+          </button>
 
-          {/* Search Bar */}
-          <form onSubmit={handleSearchSubmit} className="hidden md:flex flex-1 max-w-md mx-4 relative">
+          <nav className="hidden items-center gap-1 lg:flex">
+            {NAV_LINKS.map((link) => {
+              const active = currentView === link.view;
+              return (
+                <button
+                  key={link.path}
+                  onClick={() => goTo(link.path)}
+                  className={`rounded-full px-3.5 py-2 text-[13px] font-semibold transition-colors ${
+                    active ? 'bg-pine-soft text-pine' : 'text-ink-soft hover:bg-pine-soft/60 hover:text-ink'
+                  }`}
+                >
+                  {t(link.labelKey)}
+                </button>
+              );
+            })}
+          </nav>
+
+          <form onSubmit={handleSearchSubmit} className="relative hidden max-w-xs flex-1 md:block">
             <input
-              type="text"
-              placeholder="Search products, orders, or farmers..."
+              type="search"
+              placeholder={t('header.searchPlaceholder')}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-900/60 border border-slate-700/80 rounded-full text-white placeholder-slate-400 text-xs py-2 px-4 pl-9 focus:ring-2 focus:ring-[#10b981] outline-none transition-all"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="field !rounded-full !py-2 pl-9 pr-3 text-xs"
+              aria-label={t('header.searchAria')}
             />
-            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-2.5" />
-            {searchQuery && (
-              <button
-                type="submit"
-                className="absolute right-1.5 top-1 bg-[#10b981] hover:bg-[#059669] text-white text-[11px] font-semibold px-2.5 py-1 rounded-full"
-              >
-                Search
-              </button>
-            )}
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-ink-soft" />
           </form>
 
-          {/* Desktop Nav Links */}
-          {userRole === 'customer' ? (
-            <nav className="hidden lg:flex items-center gap-6">
-              <button
-                onClick={() => navigate('/home')}
-                className={`text-sm font-semibold transition-colors ${
-                  currentView === 'home' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
-                }`}
-              >
-                {t('nav.home')}
-              </button>
-              <button
-                onClick={() => navigate('/shop')}
-                className={`text-sm font-semibold transition-colors ${
-                  currentView === 'shop' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
-                }`}
-              >
-                {t('nav.shop')}
-              </button>
-              <button
-                onClick={() => navigate('/nutrition-quiz')}
-                className={`text-sm font-semibold flex items-center gap-1.5 transition-colors ${
-                  currentView === 'nutrition-quiz'
-                    ? 'text-[#34d399] border-b-2 border-[#34d399] py-1'
-                    : 'text-slate-200 hover:text-[#34d399]'
-                }`}
-              >
-                <Calculator className="w-4 h-4 text-[#34d399]" />
-                {t('nav.quiz')}
-              </button>
-              <button
-                onClick={() => navigate('/subscriptions')}
-                className={`text-sm font-semibold flex items-center gap-1 transition-colors ${
-                  currentView === 'subscriptions'
-                    ? 'text-[#34d399] border-b-2 border-[#34d399] py-1'
-                    : 'text-slate-200 hover:text-[#34d399]'
-                }`}
-              >
-                <Repeat className="w-4 h-4 text-amber-400" />
-                {t('nav.subscriptions')}
-              </button>
-              <button
-                onClick={() => navigate('/services')}
-                className={`text-sm font-semibold transition-colors ${
-                  currentView === 'services' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
-                }`}
-              >
-                {t('nav.services')}
-              </button>
-              <button
-                onClick={() => navigate('/offers')}
-                className={`text-sm font-semibold flex items-center gap-1 transition-colors ${
-                  currentView === 'offers' ? 'text-[#34d399] border-b-2 border-[#34d399] py-1' : 'text-slate-200 hover:text-[#34d399]'
-                }`}
-              >
-                <Tag className="w-4 h-4 text-[#34d399]" />
-                {t('nav.offers')}
-              </button>
-            </nav>
-          ) : (
-            <div className="hidden lg:flex items-center gap-3">
-              <span className="text-xs bg-amber-100 text-amber-900 border border-amber-300 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1.5">
-                <Store className="w-3.5 h-3.5 text-amber-700" />
-                {userRole === 'admin' ? 'Shop Admin Dashboard' : 'POS Counter Mode'}
-              </span>
-            </div>
-          )}
-
-          {/* Action Buttons (AI Assistant, Notification, Cart, Profile) */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            {/* The floating Dr. Pashu AI button is the single chat entry point. */}
-
-            {/* Notifications */}
-            <div className="relative">
-              <button
-                onClick={() => setIsNotifDropdownOpen(!isNotifDropdownOpen)}
-                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl relative transition-colors cursor-pointer"
-              >
-                <Bell className="w-5 h-5" />
-                {unreadNotificationCount > 0 && (
-                  <span className="absolute top-1 right-1 w-4 h-4 bg-red-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {unreadNotificationCount}
-                  </span>
-                )}
-              </button>
-
-              {isNotifDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50">
-                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
-                    <span className="font-bold text-sm text-slate-800">Notifications</span>
-                    <span className="text-xs text-slate-500">{unreadNotificationCount} new</span>
-                  </div>
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {notifications.map((notif) => (
-                      <div
-                        key={notif.id}
-                        onClick={() => markNotificationAsRead(notif.id)}
-                        className={`p-2.5 rounded-xl text-xs cursor-pointer transition-colors ${
-                          notif.read ? 'bg-slate-50 text-slate-600' : 'bg-emerald-50 text-slate-800 font-medium'
-                        }`}
-                      >
-                        <div className="font-semibold text-slate-900 mb-0.5">{notif.title}</div>
-                        <p className="text-slate-600 text-[11px] leading-snug">{notif.message}</p>
-                        <span className="text-[10px] text-slate-400 mt-1 block">{notif.timestamp}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Wishlist Button */}
-            {userRole === 'customer' && (
-              <button
-                onClick={() => navigate('/customer-dashboard')}
-                className="hidden sm:flex p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl relative transition-colors cursor-pointer"
-                title="Wishlist"
-              >
-                <Heart className="w-5 h-5" />
-                {wishlist.length > 0 && (
-                  <span className="absolute top-1 right-1 w-4 h-4 bg-emerald-600 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
-                    {wishlist.length}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {/* Cart Button */}
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setIsCartDrawerOpen(true)}
-              className="flex items-center gap-2 bg-emerald-800 hover:bg-emerald-900 text-white px-3.5 py-2 rounded-xl font-medium text-xs shadow-xs transition-colors cursor-pointer"
+              className="btn btn-primary !px-3.5 !py-2.5 text-xs"
+              aria-label={t('header.openCartAria', { count: cartItemCount })}
             >
-              <div className="relative">
-                <ShoppingBag className="w-4 h-4" />
+              <span className="relative">
+                <ShoppingBag className="h-4 w-4" />
                 {cartItemCount > 0 && (
-                  <span className="absolute -top-2 -right-2.5 w-4 h-4 bg-amber-500 text-slate-950 font-black text-[10px] rounded-full flex items-center justify-center border border-white">
+                  <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-ochre px-1 text-[9px] font-black text-white">
                     {cartItemCount}
                   </span>
                 )}
+              </span>
+              <span className="hidden sm:inline">{t('header.cart')}</span>
+            </button>
+
+            {!isAuthLoading && !user && (
+              <button onClick={() => redirectToLogin()} className="btn btn-outline hidden !px-3.5 !py-2.5 text-xs sm:inline-flex">
+                <User className="h-4 w-4" />
+                {t('header.signin')}
+              </button>
+            )}
+
+            {!isAuthLoading && user && (
+              <div className="relative">
+                <button
+                  onClick={() => setIsAccountMenuOpen((open) => !open)}
+                  className="btn btn-outline !px-3 !py-2.5 text-xs"
+                  aria-expanded={isAccountMenuOpen}
+                >
+                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-pine text-[10px] font-black text-cream">
+                    {user.name.trim().charAt(0).toUpperCase() || 'F'}
+                  </span>
+                  <span className="hidden max-w-[7rem] truncate sm:inline">{user.name}</span>
+                  <ChevronDown className="h-3 w-3 text-ink-soft" />
+                </button>
+
+                {isAccountMenuOpen && (
+                  <div className="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border border-line bg-paper shadow-xl shadow-ink/10">
+                    <div className="border-b border-line px-4 py-3">
+                      <p className="truncate text-sm font-bold text-ink">{user.name}</p>
+                      <p className="truncate text-[11px] text-ink-soft">{user.email}</p>
+                      <span className="mt-1.5 inline-block rounded-full bg-pine-soft px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-pine">
+                        {roleLabel}
+                      </span>
+                    </div>
+
+                    <div className="p-1.5">
+                      <button
+                        onClick={() => goTo('/account')}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-ink hover:bg-cream"
+                      >
+                        <User className="h-4 w-4 text-pine" />
+                        {t('header.myAccount')}
+                      </button>
+
+                      {isStaff ? (
+                        <button
+                          onClick={() => goTo('/admin-dashboard')}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-ink hover:bg-cream"
+                        >
+                          <LayoutDashboard className="h-4 w-4 text-pine" />
+                          {t('header.shopDashboard')}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => goTo('/customer-dashboard')}
+                          className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-ink hover:bg-cream"
+                        >
+                          <LayoutDashboard className="h-4 w-4 text-pine" />
+                          {t('header.myOrdersKhata')}
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          setIsAccountMenuOpen(false);
+                          void logout();
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-clay hover:bg-clay/5"
+                      >
+                        <LogOut className="h-4 w-4" />
+                        {t('header.signout')}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <span className="hidden sm:inline font-bold">Cart</span>
-            </button>
+            )}
 
-            {/* User Profile / Dashboard Button */}
             <button
-              onClick={() => {
-                if (!user) {
-                  redirectToLogin();
-                  return;
-                }
-                navigate(userRole === 'customer' ? '/customer-dashboard' : '/admin-dashboard');
-              }}
-              className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors cursor-pointer"
-              title={
-                !user
-                  ? 'Sign in'
-                  : userRole === 'customer'
-                    ? 'Customer Account'
-                    : 'Admin Portal'
-              }
+              onClick={() => setIsMobileMenuOpen((open) => !open)}
+              className="rounded-xl border border-line p-2 text-ink lg:hidden"
+              aria-label="Toggle navigation menu"
+              aria-expanded={isMobileMenuOpen}
             >
-              <User className="w-5 h-5" />
-            </button>
-
-            {/* Mobile Hamburger Menu button */}
-            <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="lg:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-xl"
-            >
-              {isMobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </button>
           </div>
         </div>
       </div>
 
-      {/* Mobile Navigation Drawer */}
       {isMobileMenuOpen && (
-        <div className="lg:hidden border-t border-slate-200 bg-white px-4 pt-3 pb-6 space-y-3">
-          <form onSubmit={handleSearchSubmit} className="relative">
+        <div className="border-t border-line bg-paper px-4 pb-6 pt-4 lg:hidden">
+          <form onSubmit={handleSearchSubmit} className="relative mb-4">
             <input
-              type="text"
-              placeholder="Search feed, calcium, bypass fat..."
+              type="search"
+              placeholder={t('header.searchPlaceholderMobile')}
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-slate-100 border border-slate-200 text-slate-800 text-sm rounded-xl pl-9 pr-4 py-2 outline-none"
+              onChange={(event) => setSearchQuery(event.target.value)}
+              className="field pl-9"
             />
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink-soft" />
           </form>
 
-          {userRole === 'customer' ? (
-            <div className="grid grid-cols-2 gap-2 text-sm font-semibold pt-2">
+          <nav className="grid grid-cols-2 gap-2">
+            {NAV_LINKS.map((link) => (
               <button
-                onClick={() => goToView('/home')}
-                className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
+                key={link.path}
+                onClick={() => goTo(link.path)}
+                className={`rounded-xl px-3 py-2.5 text-left text-sm font-semibold ${
+                  currentView === link.view ? 'bg-pine text-cream' : 'bg-cream text-ink'
+                }`}
               >
-                🏠 {t('nav.home')}
+                {t(link.labelKey)}
               </button>
-              <button
-                onClick={() => goToView('/shop')}
-                className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
-              >
-                🌾 {t('nav.shop')}
+            ))}
+          </nav>
+
+          <div className="mt-4 border-t border-line pt-4">
+            {user ? (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-semibold text-ink">{user.name}</span>
+                  <span className="rounded-full bg-pine-soft px-2 py-0.5 font-bold text-pine">{roleLabel}</span>
+                </div>
+                <button onClick={() => goTo('/account')} className="btn btn-outline w-full">
+                  {t('header.myAccount')}
+                </button>
+                <button
+                  onClick={() => goTo(isStaff ? '/admin-dashboard' : '/customer-dashboard')}
+                  className="btn btn-outline w-full"
+                >
+                  <LayoutDashboard className="h-4 w-4" />
+                  {isStaff ? t('header.shopDashboard') : t('header.myOrdersKhata')}
+                </button>
+                <button onClick={() => void logout()} className="btn w-full text-clay">
+                  <LogOut className="h-4 w-4" />
+                  {t('header.signout')}
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => redirectToLogin()} className="btn btn-primary w-full">
+                {t('header.signin')}
+                <ArrowUpRight className="h-4 w-4" />
               </button>
-              <button
-                onClick={() => goToView('/nutrition-quiz')}
-                className="p-2.5 text-left rounded-lg bg-emerald-50 text-emerald-800"
-              >
-                🧮 {t('nav.quiz')}
-              </button>
-              <button
-                onClick={() => goToView('/subscriptions')}
-                className="p-2.5 text-left rounded-lg bg-amber-50 text-amber-900"
-              >
-                🔄 {t('nav.subscriptions')}
-              </button>
-              <button
-                onClick={() => goToView('/customer-dashboard')}
-                className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
-              >
-                👤 My Account / Khata
-              </button>
-              <button
-                onClick={() => goToView('/offers')}
-                className="p-2.5 text-left rounded-lg bg-slate-50 text-slate-800"
-              >
-                🏷️ {t('nav.offers')}
-              </button>
-            </div>
-          ) : (
-            <div className="pt-2">
-              <button
-                onClick={() => {
-                  navigate('/admin-dashboard');
-                  setIsMobileMenuOpen(false);
-                }}
-                className="w-full p-3 bg-emerald-800 text-white font-bold rounded-xl text-center"
-              >
-                Go to SaaS Admin Portal
-              </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
     </header>

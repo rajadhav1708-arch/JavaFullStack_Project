@@ -127,18 +127,18 @@ async function main(): Promise<void> {
   console.log('Seeding demo accounts:\n');
 
   for (const user of DEMO_USERS) {
-    const rows = await query<SessionUser>(
-      `INSERT INTO users (email, password_hash, name, role, village)
-       VALUES ($1, $2, $3, $4, $5)
+    const rows = await query<{ id: number; email: string; customer_code: string; name: string; role: string; village: string }>(
+      `INSERT INTO users (email, password_hash, name, role, village, customer_code)
+       VALUES ($1, $2, $3, $4, $5, 'HT-CUS-' || nextval('customer_code_seq'))
        ON CONFLICT (email) DO UPDATE
          SET password_hash = EXCLUDED.password_hash,
              name = EXCLUDED.name,
              role = EXCLUDED.role,
              village = EXCLUDED.village
-       RETURNING id, email, name, role, village`,
+       RETURNING id, email, customer_code, name, role, village`,
       [user.email, await hashPassword(user.password), user.name, user.role, user.village]
     );
-    console.log(`  ${rows[0].role.padEnd(8)} ${rows[0].email.padEnd(26)} password: ${user.password}`);
+    console.log(`  ${rows[0].role.padEnd(8)} ${rows[0].customer_code}  ${rows[0].email.padEnd(26)} password: ${user.password}`);
   }
 
   console.log('');

@@ -1,225 +1,173 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import type { Order } from '../../types';
-import {
-  TrendingUp,
-  AlertTriangle,
-  ShieldCheck,
-  ArrowUpRight,
-  Plus,
-  Truck,
-} from 'lucide-react';
+import { TrendingUp, AlertTriangle, ShieldCheck, Truck, Package, Plus } from 'lucide-react';
 
-/**
- * Badge colour per order status. Every status gets an explicit colour: the old
- * conditional chain fell through to red, which painted every order still in
- * flight (Placed, Packed, Out for Delivery) as if it had failed.
- */
+/** Badge colour per order status. Every status gets an explicit colour: the old
+ *  conditional chain fell through to red, which painted every order still in
+ *  flight (Placed, Packed, Out for Delivery) as if it had failed. */
 const STATUS_BADGE: Record<Order['status'], string> = {
-  Placed: 'bg-slate-100 text-slate-700',
-  Confirmed: 'bg-blue-100 text-blue-700',
-  Packed: 'bg-indigo-100 text-indigo-700',
-  Shipped: 'bg-amber-100 text-amber-700',
-  'Out for Delivery': 'bg-amber-100 text-amber-700',
-  Delivered: 'bg-green-100 text-green-700',
-  Cancelled: 'bg-red-100 text-red-700',
+  Placed: 'bg-cream text-ink-soft',
+  Confirmed: 'bg-pine-soft text-pine',
+  Packed: 'bg-pine-soft text-pine',
+  Shipped: 'bg-ochre-soft text-ink',
+  'Out for Delivery': 'bg-ochre-soft text-ink',
+  Delivered: 'bg-pine text-cream',
+  Cancelled: 'bg-clay/10 text-clay',
 };
 
 export const AdminOverview: React.FC = () => {
   const { products, orders, khataRecords, setAdminTab } = useApp();
 
-  const lowStockProducts = products.filter((p) => p.stockCount <= p.minStockLevel);
-  const overdueKhataCount = khataRecords.filter((k) => k.status === 'Overdue').length;
-  const todaySales = orders.reduce((sum, o) => sum + o.totalAmount, 0);
-  const totalKhataOutstanding = khataRecords.reduce((sum, k) => sum + k.totalOutstanding, 0);
+  const lowStockProducts = products.filter((product) => product.stockCount <= product.minStockLevel);
+  const overdueKhataCount = khataRecords.filter((record) => record.paymentStatus === 'Overdue').length;
+  const totalOrderValue = orders.reduce((sum, order) => sum + order.totalAmount, 0);
+  const totalKhataOutstanding = khataRecords.reduce((sum, record) => sum + record.totalOutstanding, 0);
+  const openOrders = orders.filter(
+    (order) => order.status !== 'Delivered' && order.status !== 'Cancelled'
+  );
 
   return (
     <div className="space-y-6">
-      {/* Top Welcome Bar */}
-      <div className="bg-[#064e3b] text-white p-6 rounded-2xl shadow-sm border border-[#065f46] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      <div className="card flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-center">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Central Shop Operations Dashboard</h1>
-          <p className="text-xs text-[#a7f3d0] mt-1">
-            Real-time sales, inventory batch tracking, POS counter billing, and farmer credit ledger.
+          <p className="eyebrow">Dashboard</p>
+          <h1 className="mt-2 text-xl text-ink sm:text-2xl">Shop overview</h1>
+          <p className="mt-1 text-xs text-ink-soft">
+            Live figures from orders, stock and the credit ledger.
           </p>
         </div>
 
-        <button
-          onClick={() => setAdminTab('pos')}
-          className="bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs px-5 py-2.5 rounded-lg flex items-center gap-2 cursor-pointer shadow-sm transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          <span>+ New Sale / POS Counter</span>
+        <button onClick={() => setAdminTab('pos')} className="btn btn-primary self-start sm:self-auto">
+          <Plus className="h-4 w-4" />
+          New counter sale
         </button>
       </div>
 
-      {/* KPI Stats Cards - High Density Theme */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs text-slate-500 font-medium uppercase tracking-wider flex items-center justify-between">
-            <span>Total Revenue (MTD)</span>
-            <TrendingUp className="w-3.5 h-3.5 text-[#10b981]" />
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <div className="card p-4">
+          <div className="flex items-center justify-between text-ink-soft">
+            <span className="text-xs font-bold uppercase tracking-wide">Order value</span>
+            <TrendingUp className="h-3.5 w-3.5 text-pine" />
           </div>
-          <div className="text-2xl font-bold mt-1 text-slate-900">
-            ₹{todaySales.toLocaleString('en-IN')}
-          </div>
-          <div className="text-[10px] text-green-600 font-semibold mt-1 flex items-center gap-0.5">
-            <ArrowUpRight className="w-3 h-3" />
-            <span>+12.4% from last month</span>
-          </div>
+          <p className="mt-1 text-2xl font-bold text-ink">₹{totalOrderValue.toLocaleString('en-IN')}</p>
+          <p className="mt-1 text-[10px] font-semibold text-ink-soft">Across all recorded orders</p>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs text-slate-500 font-medium uppercase tracking-wider flex items-center justify-between">
-            <span>Active Credit Ledger</span>
-            <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+        <div className="card p-4">
+          <div className="flex items-center justify-between text-ink-soft">
+            <span className="text-xs font-bold uppercase tracking-wide">Khata due</span>
+            <ShieldCheck className="h-3.5 w-3.5 text-ochre" />
           </div>
-          <div className="text-2xl font-bold mt-1 text-slate-900">
+          <p className="mt-1 text-2xl font-bold text-ink">
             ₹{totalKhataOutstanding.toLocaleString('en-IN')}
-          </div>
-          <div className="text-[10px] text-amber-600 font-semibold mt-1">
-            {overdueKhataCount} farmers overdue (&gt;30 days)
-          </div>
+          </p>
+          <p className="mt-1 text-[10px] font-semibold text-ink-soft">
+            {overdueKhataCount} overdue ({khataRecords.length} accounts)
+          </p>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs text-slate-500 font-medium uppercase tracking-wider flex items-center justify-between">
-            <span>Low Stock Alerts</span>
-            <AlertTriangle className="w-3.5 h-3.5 text-red-600" />
+        <div className="card p-4">
+          <div className="flex items-center justify-between text-ink-soft">
+            <span className="text-xs font-bold uppercase tracking-wide">Low stock</span>
+            <AlertTriangle className="h-3.5 w-3.5 text-clay" />
           </div>
-          <div className="text-2xl font-bold mt-1 text-red-600">
-            {lowStockProducts.length < 10 ? `0${lowStockProducts.length}` : lowStockProducts.length}
-          </div>
-          <div className="text-[10px] text-slate-500 font-semibold mt-1">
-            Reorder priority required
-          </div>
+          <p className="mt-1 text-2xl font-bold text-clay">{lowStockProducts.length}</p>
+          <p className="mt-1 text-[10px] font-semibold text-ink-soft">At or below reorder level</p>
         </div>
 
-        <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
-          <div className="text-xs text-slate-500 font-medium uppercase tracking-wider flex items-center justify-between">
-            <span>Pending Deliveries</span>
-            <Truck className="w-3.5 h-3.5 text-[#10b981]" />
+        <div className="card p-4">
+          <div className="flex items-center justify-between text-ink-soft">
+            <span className="text-xs font-bold uppercase tracking-wide">Open orders</span>
+            <Truck className="h-3.5 w-3.5 text-pine" />
           </div>
-          <div className="text-2xl font-bold mt-1 text-slate-900">{orders.length}</div>
-          <div className="text-[10px] text-green-600 font-semibold mt-1">
-            Village Freight Dispatches Active
-          </div>
+          <p className="mt-1 text-2xl font-bold text-ink">{openOrders.length}</p>
+          <p className="mt-1 text-[10px] font-semibold text-ink-soft">Awaiting delivery or cancellation</p>
         </div>
       </div>
 
-      {/* Grid Section: High Density Sales Table + Inventory At A Glance Widget */}
       <div className="grid grid-cols-12 gap-6">
-        {/* Recent Sales Table (8 Cols) */}
-        <div className="col-span-12 lg:col-span-8 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-100 flex justify-between items-center">
-            <h3 className="font-bold text-slate-800 text-sm">Recent Sales & Transactions</h3>
-            <button
-              onClick={() => setAdminTab('delivery')}
-              className="text-xs text-[#10b981] font-semibold hover:underline cursor-pointer"
-            >
-              View All
+        <div className="card col-span-12 flex flex-col overflow-hidden lg:col-span-8">
+          <div className="flex items-center justify-between border-b border-line px-5 py-4">
+            <h2 className="text-sm font-bold text-ink">Recent orders</h2>
+            <button onClick={() => setAdminTab('delivery')} className="text-xs font-semibold text-pine hover:underline">
+              View all
             </button>
           </div>
 
-          <div className="overflow-x-auto p-2">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="text-[11px] uppercase text-slate-400 border-b border-slate-100">
-                  <th className="p-3 font-semibold">Order ID</th>
-                  <th className="p-3 font-semibold">Customer</th>
-                  <th className="p-3 font-semibold">Product Details</th>
-                  <th className="p-3 font-semibold">Status</th>
-                  <th className="p-3 font-semibold text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="text-xs">
-                {orders.slice(0, 5).map((ord) => (
-                  <tr key={ord.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                    <td className="p-3 font-mono font-bold text-slate-700">{ord.orderNumber}</td>
-                    <td className="p-3">
-                      <div className="font-semibold text-slate-800">{ord.customerName}</div>
-                      <div className="text-[10px] text-slate-400">{ord.customerVillage}</div>
-                    </td>
-                    <td className="p-3 text-slate-600 max-w-[180px] truncate">
-                      {ord.items.map((i) => i.productName).join(', ')}
-                    </td>
-                    <td className="p-3">
-                      <span
-                        className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          STATUS_BADGE[ord.status]
-                        }`}
-                      >
-                        {ord.status}
-                      </span>
-                    </td>
-                    <td className="p-3 text-right font-semibold text-slate-900">
-                      ₹{ord.totalAmount.toLocaleString('en-IN')}
-                    </td>
+          {orders.length === 0 ? (
+            <p className="p-8 text-center text-xs text-ink-soft">No orders recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto p-2">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-line text-[11px] uppercase text-ink-soft">
+                    <th className="p-3 font-semibold">Order</th>
+                    <th className="p-3 font-semibold">Customer</th>
+                    <th className="p-3 font-semibold">Items</th>
+                    <th className="p-3 font-semibold">Status</th>
+                    <th className="p-3 text-right font-semibold">Amount</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="text-xs">
+                  {orders.slice(0, 5).map((order) => (
+                    <tr key={order.id} className="border-b border-line/60 transition-colors hover:bg-cream/40">
+                      <td className="p-3 font-mono font-bold text-ink-soft">{order.orderNumber}</td>
+                      <td className="p-3">
+                        <div className="font-semibold text-ink">{order.customerName}</div>
+                        <div className="text-[10px] text-ink-soft">{order.customerVillage}</div>
+                      </td>
+                      <td className="max-w-[180px] truncate p-3 text-ink-soft">
+                        {order.items.map((item) => item.productName).join(', ')}
+                      </td>
+                      <td className="p-3">
+                        <span className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase ${STATUS_BADGE[order.status]}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-semibold text-ink">
+                        ₹{order.totalAmount.toLocaleString('en-IN')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
-        {/* Right Widgets (4 Cols) */}
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
-          {/* Smart Recommender Widget */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-            <h3 className="font-bold text-slate-800 text-sm mb-3">Smart Feed Recommender</h3>
+        <div className="card col-span-12 p-5 lg:col-span-4">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
+            <Package className="h-4 w-4 text-pine" />
+            Low stock watchlist
+          </h2>
+
+          {lowStockProducts.length === 0 ? (
+            <p className="text-xs text-ink-soft">All products are above their reorder level.</p>
+          ) : (
             <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-500 font-medium">Active Analysis</span>
-                <span className="font-bold text-[#10b981]">72% Profiled</span>
-              </div>
-              <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                <div className="w-[72%] h-full bg-[#10b981] rounded-full"></div>
-              </div>
-              <p className="text-[11px] text-slate-500 mt-2 italic leading-relaxed">
-                &quot;High-protein bypass fat supplements recommended for crossbreed cows during monsoon high-humidity lactation.&quot;
-              </p>
-              <button
-                onClick={() => setAdminTab('inventory')}
-                className="w-full py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 mt-2 hover:bg-slate-100 cursor-pointer"
-              >
-                Run Recommendation Tool
+              {lowStockProducts.slice(0, 6).map((product) => (
+                <div key={product.id} className="flex items-center justify-between border-b border-line pb-2 text-xs last:border-b-0">
+                  <div>
+                    <div className="font-medium text-ink">{product.name}</div>
+                    <div className="text-[10px] text-ink-soft">
+                      {product.stockCount} in stock · reorder at {product.minStockLevel}
+                    </div>
+                  </div>
+                  <span
+                    className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                      product.stockCount === 0 ? 'bg-clay/10 text-clay' : 'bg-ochre-soft text-ink'
+                    }`}
+                  >
+                    {product.stockCount === 0 ? 'Out' : 'Low'}
+                  </span>
+                </div>
+              ))}
+              <button onClick={() => setAdminTab('inventory')} className="btn btn-outline w-full !py-2 text-xs">
+                Open inventory
               </button>
             </div>
-          </div>
-
-          {/* Dark Forest Green Inventory Card */}
-          <div className="bg-[#064e3b] rounded-xl shadow-sm p-5 text-white relative overflow-hidden flex-1">
-            <div className="relative z-10">
-              <h3 className="font-bold text-sm mb-1">Inventory At A Glance</h3>
-              <p className="text-[10px] text-[#a7f3d0] mb-4">50kg Feed Bags Stock Health</p>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs pb-2 border-b border-[#065f46]">
-                  <div>
-                    <div className="font-medium text-[#34d399]">High-Pro Pellets</div>
-                    <div className="text-[10px] opacity-70">In Stock: 142 bags</div>
-                  </div>
-                  <div className="text-right font-bold text-xs text-[#34d399]">94%</div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs pb-2 border-b border-[#065f46]">
-                  <div>
-                    <div className="font-medium text-amber-300">Mineral Mix XL</div>
-                    <div className="text-[10px] opacity-70">In Stock: 8 units</div>
-                  </div>
-                  <div className="text-right font-bold text-xs text-amber-300">Low</div>
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <div>
-                    <div className="font-medium text-red-300">Lactation Booster</div>
-                    <div className="text-[10px] opacity-70">In Stock: 2 bags</div>
-                  </div>
-                  <div className="text-right font-bold text-xs text-red-300">Reorder</div>
-                </div>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,256 +1,251 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import {
-  ShoppingBag,
-  ShieldCheck,
-  Repeat,
-  Award,
-  Truck,
-} from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
+import { ShoppingBag, ShieldCheck, Heart, Truck, ArrowRight } from 'lucide-react';
+import { MyKhataTab } from './MyKhataTab';
+
+type Tab = 'orders' | 'khata' | 'wishlist';
 
 export const CustomerDashboard: React.FC = () => {
   const {
     orders,
     khataRecords,
-    subscriptions,
     wishlist,
     products,
     setActiveOrderForTracking,
     setCurrentView,
   } = useApp();
   const { user } = useAuth();
+  const { t } = useLanguage();
 
-  const [activeTab, setActiveTab] = useState<'orders' | 'khata' | 'subscriptions' | 'wishlist'>('orders');
+  const [activeTab, setActiveTab] = useState<Tab>('orders');
 
-  // The dashboard must reflect the signed-in account, never a sample row.
   const initials = (user?.name ?? 'U')
     .split(/\s+/)
     .map((part) => part[0])
     .slice(0, 2)
     .join('')
     .toUpperCase();
-  const myKhata =
-    khataRecords.find((k) => k.customerName.toLowerCase() === (user?.name ?? '').toLowerCase()) ??
-    khataRecords[0];
+
+  // Match by the server-scoped user id, never by display name. The API already
+  // returns only this customer's ledger; the id check is a second line of defence.
+  const myKhata = khataRecords.find(
+    (record) => user != null && record.customerId === `user-${user.id}`
+  );
+
+  const activeOrders = orders.filter(
+    (order) => order.status !== 'Delivered' && order.status !== 'Cancelled'
+  ).length;
 
   return (
-    <div className="bg-transparent text-slate-100 min-h-screen py-10 relative z-10">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        {/* Profile Welcome Header */}
-        <div className="bg-gradient-to-r from-emerald-900 via-slate-900 to-emerald-950 text-white p-6 sm:p-8 rounded-3xl shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-amber-400 text-slate-950 font-black text-2xl flex items-center justify-center border-2 border-white shadow-md">
-                {initials}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-xl sm:text-2xl font-black">{user?.name ?? 'My Account'}</h1>
-                  <span className="bg-emerald-800 border border-emerald-600 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                    Dairy Customer
+    <div className="min-h-screen bg-cream py-10">
+      <div className="mx-auto max-w-6xl space-y-6 px-4 sm:px-6 lg:px-8">
+        <section className="card flex flex-col justify-between gap-6 p-6 sm:flex-row sm:items-center sm:p-8">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-pine font-display text-2xl font-semibold text-cream">
+              {initials}
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl text-ink sm:text-2xl">{user?.name ?? t('customer.title')}</h1>
+                {user?.role === 'customer' && (
+                  <span className="rounded-full bg-pine-soft px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-pine">
+                    {t('customer.dairyBadge')}
                   </span>
-                </div>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  {user?.village ? `${user.village} | ` : ''}{user?.email}
-                </p>
+                )}
               </div>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                {user?.customerCode ? `${user.customerCode} · ` : ''}
+                {user?.village ? `${user.village} · ` : ''}
+                {user?.email}
+              </p>
             </div>
+          </div>
 
-          <button
-            onClick={() => setCurrentView('shop')}
-            className="bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-5 py-3 rounded-2xl flex items-center gap-2 cursor-pointer shadow-md"
-          >
-            <ShoppingBag className="w-4 h-4 text-amber-300" />
-            <span>Order Feed</span>
+          <button onClick={() => setCurrentView('shop')} className="btn btn-primary self-start sm:self-auto">
+            <ShoppingBag className="h-4 w-4" />
+            {t('customer.orderFeed')}
           </button>
-        </div>
+        </section>
 
-        {/* Dashboard Overview Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-bold text-slate-600">Total Orders</span>
-              <ShoppingBag className="w-4 h-4 text-emerald-700" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="card p-5">
+            <div className="flex items-center justify-between text-ink-soft">
+              <span className="text-xs font-bold">{t('customer.statOrders')}</span>
+              <ShoppingBag className="h-4 w-4 text-pine" />
             </div>
-            <div className="text-2xl font-black text-slate-900">{orders.length} Orders</div>
-            <span className="text-[10px] text-emerald-700 font-semibold">Active village deliveries</span>
+            <p className="mt-2 font-display text-2xl font-semibold text-ink">{orders.length}</p>
+            <p className="text-[11px] text-ink-soft">
+              {activeOrders > 0 ? t('customer.statOrdersSub', { n: activeOrders }) : t('customer.statOrdersNone')}
+            </p>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-bold text-slate-600">Khata Due Balance</span>
-              <ShieldCheck className="w-4 h-4 text-amber-600" />
+          <div className="card p-5">
+            <div className="flex items-center justify-between text-ink-soft">
+              <span className="text-xs font-bold">{t('customer.statKhata')}</span>
+              <ShieldCheck className="h-4 w-4 text-ochre" />
             </div>
-            <div className="text-2xl font-black text-amber-900">
-              ₹{myKhata ? myKhata.totalOutstanding.toLocaleString('en-IN') : 0}
-            </div>
-            <span className="text-[10px] text-slate-500">Due Date: {myKhata?.dueDate}</span>
+            <p className="mt-2 font-display text-2xl font-semibold text-ink">
+              ₹{(myKhata?.totalOutstanding ?? 0).toLocaleString('en-IN')}
+            </p>
+            <p className="text-[11px] text-ink-soft">
+              {myKhata && myKhata.status === 'Approved'
+                ? t('customer.statKhataDue', { date: myKhata.dueDate || '—' })
+                : myKhata
+                  ? `Khata ${myKhata.status.toLowerCase()}`
+                  : t('customer.statKhataNone')}
+            </p>
           </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-bold text-slate-600">Loyalty Points</span>
-              <Award className="w-4 h-4 text-emerald-700" />
+          <div className="card p-5">
+            <div className="flex items-center justify-between text-ink-soft">
+              <span className="text-xs font-bold">{t('customer.statSaved')}</span>
+              <Heart className="h-4 w-4 text-clay" />
             </div>
-            <div className="text-2xl font-black text-slate-900">1,480 PTS</div>
-            <span className="text-[10px] text-emerald-700 font-semibold">₹148 Instant Cash Redeemable</span>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs">
-            <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-bold text-slate-600">Auto Subscriptions</span>
-              <Repeat className="w-4 h-4 text-emerald-700" />
-            </div>
-            <div className="text-2xl font-black text-slate-900">{subscriptions.length} Active</div>
-            <span className="text-[10px] text-emerald-700 font-semibold">Next: {subscriptions[0]?.nextDeliveryDate}</span>
+            <p className="mt-2 font-display text-2xl font-semibold text-ink">{wishlist.length}</p>
+            <p className="text-[11px] text-ink-soft">{t('customer.statSavedSub')}</p>
           </div>
         </div>
 
-        {/* Customer Portal Tabs */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs space-y-6">
-          <div className="flex items-center gap-2 border-b border-slate-200 pb-3 overflow-x-auto scrollbar-none">
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'orders' ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              My Orders ({orders.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('khata')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'khata' ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              Khata Credit Ledger
-            </button>
-            <button
-              onClick={() => setActiveTab('subscriptions')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'subscriptions' ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              Feed Subscriptions
-            </button>
-            <button
-              onClick={() => setActiveTab('wishlist')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                activeTab === 'wishlist' ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
-            >
-              Saved Wishlist ({wishlist.length})
-            </button>
+        <section className="card overflow-hidden">
+          <div className="flex gap-1 overflow-x-auto border-b border-line p-3">
+            {(
+              [
+                { id: 'orders', label: t('customer.tabOrders', { n: orders.length }) },
+                { id: 'khata', label: t('customer.tabKhata') },
+                { id: 'wishlist', label: t('customer.tabSaved', { n: wishlist.length }) },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition-colors ${
+                  activeTab === tab.id ? 'bg-pine text-cream' : 'text-ink-soft hover:bg-cream hover:text-ink'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
 
-          {/* TAB 1: ORDERS */}
-          {activeTab === 'orders' && (
-            <div className="space-y-4">
-              {orders.map((ord) => (
-                <div
-                  key={ord.id}
-                  className="p-5 bg-slate-50 rounded-2xl border border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md">
-                        {ord.status}
-                      </span>
-                      <span className="text-xs text-slate-400">Order #{ord.orderNumber}</span>
-                    </div>
-                    <div className="text-sm font-bold text-slate-900">
-                      {ord.items.map((i) => `${i.productName} (x${i.quantity})`).join(', ')}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      Placed on: {ord.date} | Payment: {ord.paymentMethod} ({ord.paymentStatus})
-                    </div>
-                  </div>
+          <div className="p-5 sm:p-6">
+            {activeTab === 'orders' && (
+              <div className="space-y-3">
+                {orders.length === 0 && (
+                  <EmptyState
+                    icon={ShoppingBag}
+                    title={t('customer.ordersEmptyTitle')}
+                    body={t('customer.ordersEmptyBody')}
+                    actionLabel={t('customer.ordersEmptyCta')}
+                    onAction={() => setCurrentView('shop')}
+                  />
+                )}
 
-                  <div className="flex sm:flex-col items-center sm:items-end justify-between w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0 gap-2">
-                    <div className="text-base font-black text-slate-900">₹{ord.totalAmount.toLocaleString('en-IN')}</div>
-                    <button
-                      onClick={() => {
-                        setActiveOrderForTracking(ord);
-                        setCurrentView('order-tracking');
-                      }}
-                      className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1 cursor-pointer"
-                    >
-                      <Truck className="w-3.5 h-3.5" />
-                      <span>Track Order</span>
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* TAB 2: KHATA LEDGER */}
-          {activeTab === 'khata' && myKhata && (
-            <div className="space-y-4">
-              <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 text-xs">
-                <div>
-                  <div className="font-bold text-emerald-900 text-sm">Credit Limit: ₹{myKhata.totalCreditLimit.toLocaleString('en-IN')}</div>
-                  <div className="text-emerald-700 mt-0.5">Approved for milk collection deduction</div>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-xs text-slate-500 font-semibold">Outstanding Due:</div>
-                  <div className="text-xl font-black text-amber-900">₹{myKhata.totalOutstanding.toLocaleString('en-IN')}</div>
-                </div>
-              </div>
-
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">Khata Transaction Log</h4>
-              <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
-                {myKhata.transactions.map((tx) => (
-                  <div key={tx.id} className="p-3.5 flex items-center justify-between text-xs">
+                {orders.map((order) => (
+                  <article
+                    key={order.id}
+                    className="flex flex-col justify-between gap-4 rounded-2xl border border-line bg-cream/60 p-4 sm:flex-row sm:items-center"
+                  >
                     <div>
-                      <div className="font-bold text-slate-900">{tx.notes}</div>
-                      <div className="text-[11px] text-slate-400">{tx.date}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-full bg-pine-soft px-2.5 py-0.5 text-[10px] font-bold text-pine">
+                          {order.status}
+                        </span>
+                        <span className="text-[11px] text-ink-soft">Order #{order.orderNumber}</span>
+                      </div>
+                      <p className="mt-1.5 text-sm font-bold text-ink">
+                        {order.items.map((item) => `${item.productName} (x${item.quantity})`).join(', ')}
+                      </p>
+                      <p className="text-[11px] text-ink-soft">
+                        {order.date} · {order.paymentMethod} ({order.paymentStatus})
+                      </p>
                     </div>
-                    <div className={`font-black ${tx.type === 'Purchase' ? 'text-amber-800' : 'text-emerald-700'}`}>
-                      {tx.type === 'Purchase' ? `+₹${tx.amount}` : `-₹${tx.amount}`}
+
+                    <div className="flex items-center justify-between gap-4 border-t border-line pt-3 sm:flex-col sm:items-end sm:border-t-0 sm:pt-0">
+                      <p className="font-display text-lg font-semibold text-ink">
+                        ₹{order.totalAmount.toLocaleString('en-IN')}
+                      </p>
+                      <button
+                        onClick={() => {
+                          setActiveOrderForTracking(order);
+                          setCurrentView('order-tracking');
+                        }}
+                        className="btn btn-outline !px-3 !py-2 text-[11px]"
+                      >
+                        <Truck className="h-3.5 w-3.5" />
+                        {t('customer.trackOrder')}
+                      </button>
                     </div>
-                  </div>
+                  </article>
                 ))}
               </div>
-            </div>
-          )}
+            )}
 
-          {/* TAB 3: SUBSCRIPTIONS */}
-          {activeTab === 'subscriptions' && (
-            <div className="space-y-3 text-xs">
-              {subscriptions.map((sub) => (
-                <div key={sub.id} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex justify-between items-center">
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">{sub.productName}</div>
-                    <div className="text-slate-500">Every {sub.frequencyDays} Days | Next: {sub.nextDeliveryDate}</div>
-                  </div>
-                  <div className="font-black text-slate-900 text-sm">₹{sub.pricePerDelivery}</div>
-                </div>
-              ))}
-            </div>
-          )}
+            {activeTab === 'khata' && <MyKhataTab />}
 
-          {/* TAB 4: WISHLIST */}
-          {activeTab === 'wishlist' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {wishlist.map((id) => {
-                const prod = products.find((p) => p.id === id);
-                if (!prod) return null;
-                return (
-                  <div key={id} className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center gap-3">
-                    <img src={prod.image} alt={prod.name} className="w-16 h-16 object-cover rounded-xl" />
-                    <div>
-                      <div className="font-bold text-slate-900 text-xs">{prod.name}</div>
-                      <div className="font-black text-slate-900 text-xs mt-1">₹{prod.price}</div>
-                    </div>
+            {activeTab === 'wishlist' && (
+              <div>
+                {wishlist.length === 0 ? (
+                  <EmptyState
+                    icon={Heart}
+                    title={t('customer.savedEmptyTitle')}
+                    body={t('customer.savedEmptyBody')}
+                    actionLabel={t('customer.savedEmptyCta')}
+                    onAction={() => setCurrentView('shop')}
+                  />
+                ) : (
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {wishlist.map((id) => {
+                      const product = products.find((p) => p.id === id);
+                      if (!product) return null;
+                      return (
+                        <div
+                          key={id}
+                          className="flex items-center gap-3 rounded-2xl border border-line bg-cream/60 p-3"
+                        >
+                          <img
+                            src={product.image}
+                            alt={product.name}
+                            loading="lazy"
+                            className="h-16 w-16 rounded-xl object-cover"
+                          />
+                          <div>
+                            <p className="text-xs font-bold text-ink">{product.name}</p>
+                            <p className="mt-1 font-display text-sm font-semibold text-ink">
+                              ₹{product.price.toLocaleString('en-IN')}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );
 };
+
+const EmptyState: React.FC<{
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  body: string;
+  actionLabel: string;
+  onAction: () => void;
+}> = ({ icon: Icon, title, body, actionLabel, onAction }) => (
+  <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-line bg-cream/50 px-6 py-10 text-center">
+    <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-pine-soft text-pine">
+      <Icon className="h-5 w-5" />
+    </span>
+    <h3 className="mt-3 text-base font-semibold text-ink">{title}</h3>
+    <p className="mt-1 max-w-sm text-xs leading-relaxed text-ink-soft">{body}</p>
+    <button onClick={onAction} className="btn btn-outline mt-4 !px-4 !py-2 text-xs">
+      {actionLabel}
+      <ArrowRight className="h-3.5 w-3.5" />
+    </button>
+  </div>
+);

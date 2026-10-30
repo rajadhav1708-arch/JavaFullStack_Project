@@ -1,22 +1,54 @@
 import './env';
 import { Pool, type QueryResultRow } from 'pg';
 
-const connectionString = process.env.DATABASE_URL;
+const rawConnectionString = process.env.DATABASE_URL;
+
+/**
+ * pg 8.23 treats `sslmode=require` as `verify-full`, which rejects the cert
+ * chain used by some managed providers (Supabase pooler included). Strip the
+ * parameter and pass an explicit non-verifying TLS config instead. The traffic
+ * is still encrypted; only certificate pinning is skipped, which is the same
+ * trust model as libpq's historical `require`.
+ */
+function parseConnectionString(raw: string): {
+  connectionString: string;
+  ssl?: { rejectUnauthorized: boolean };
+} {
+  const wantsSsl =
+    /sslmode=(require|prefer|verify-ca|verify-full)/i.test(raw) ||
+    /(supabase\.(co|com)|neon\.tech|render\.com|pooler\.)/i.test(raw);
+
+  try {
+    const url = new URL(raw);
+    url.searchParams.delete('sslmode');
+    url.searchParams.delete('uselibpqcompat');
+    url.searchParams.delete('pgbouncer');
+    return {
+      connectionString: url.toString(),
+      ...(wantsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    };
+  } catch {
+    return {
+      connectionString: raw,
+      ...(wantsSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+    };
+  }
+}
+
+const parsed = rawConnectionString ? parseConnectionString(rawConnectionString) : null;
 
 /**
  * The app runs without a database. `pool` stays null when DATABASE_URL is unset
  * so read-only features (storefront, AI ration quiz, chatbot) keep working and
  * only the auth endpoints report 503.
  */
-export const isDbConfigured = Boolean(connectionString);
+export const isDbConfigured = Boolean(rawConnectionString);
 
-export const pool = connectionString
+export const pool = parsed
   ? new Pool({
-      connectionString,
+      connectionString: parsed.connectionString,
       max: 5,
-      // Managed Postgres (Neon, Supabase, Render) requires TLS. Local Docker
-      // Postgres has no TLS, so only negotiate when the URL asks for it.
-      ...(connectionString.includes('sslmode=require') ? { ssl: { rejectUnauthorized: false } } : {}),
+      ...(parsed.ssl ? { ssl: parsed.ssl } : {}),
     })
   : null;
 
@@ -43,7 +75,8 @@ export async function checkDb(): Promise<'ok' | 'error' | 'unconfigured'> {
   try {
     await pool.query('SELECT 1');
     return 'ok';
-  } catch {
+  } catch (error) {
+    console.error('[db] health check failed:', error instanceof Error ? error.message : error);
     return 'error';
   }
 }

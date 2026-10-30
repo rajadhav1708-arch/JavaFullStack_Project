@@ -1,8 +1,12 @@
-# PashuFeed Pro
+# Hindavi Traders (PashuFeed Pro)
 
-Cattle feed shop and farm management platform for dairy farmers and shop owners.
-Covers the storefront, POS billing, inventory, the farmer credit ledger (Khata),
-ration guidance, and an AI nutrition advisor.
+Cattle feed shop and farm management platform for dairy farmers and shop
+owners in Kolhapur district. Covers the storefront, POS counter billing,
+inventory view, the farmer credit ledger (Khata), a rule-based ration
+calculator, and an AI feed assistant (Gemini).
+
+Storefront branding, contact details and WhatsApp deep links come from a
+single source of truth: `frontend/src/data/store.ts`.
 
 ## Stack
 
@@ -12,6 +16,8 @@ ration guidance, and an AI nutrition advisor.
 | Build | Vite 6 |
 | Styling | Tailwind CSS 4 (`@tailwindcss/vite`, no PostCSS config) |
 | Icons | lucide-react |
+| Animations | framer-motion |
+| Routing | react-router-dom 7 |
 | API | Express 4, run with `tsx` |
 | Database | PostgreSQL via `pg` (plain SQL, no ORM) |
 | Auth | scrypt password hashing + JWT in an httpOnly cookie |
@@ -20,24 +26,40 @@ ration guidance, and an AI nutrition advisor.
 ## Setup guide for a fresh machine
 
 1. Install Node.js 20+, Docker Desktop (running), and Git.
-2. Clone the repo, then: ```bash
+2. Clone the repo, then:
+
+   ```bash
    npm install
    cp .env.example .env   # Windows: Copy-Item .env.example .env
    ```
-3. Open `.env` and fill in: `DATABASE_URL` (already set for Docker), `SESSION_SECRET` (any long string), `GEMINI_API_KEY` (from Google AI Studio).
-4. Start the database and load schema + demo data: ```bash
+
+3. Open `.env` and fill in: `DATABASE_URL` (already set for Docker), any long
+   `SESSION_SECRET`, and `GEMINI_API_KEY` (from Google AI Studio) if you want
+   live chat replies.
+4. Start the database and load schema + demo data:
+
+   ```bash
    docker compose up -d
    npm run db:init
    npm run db:seed
    ```
-5. Run everything: ```bash
+
+5. Run everything:
+
+   ```bash
    npm run dev
    ```
+
    Vite on http://localhost:3000 , API on http://localhost:3001 .
 
-Demo logins: `admin@pashufeed.test` / `Admin@12345`, `farmer@pashufeed.test` / `Farmer@12345`.
+Demo logins (created by `npm run db:seed`; re-running the seed resets these
+passwords):
 
-The hero intake video is committed, so the page renders without regenerating anything. The parallax background uses a procedural particle animation (no external frame assets required).
+| Role | Email | Password |
+| --- | --- | --- |
+| Shop admin | `admin@pashufeed.test` | `Admin@12345` |
+| Dairy farmer (customer) | `farmer@pashufeed.test` | `Farmer@12345` |
+
 ## Requirements
 
 - Node.js 20 or newer
@@ -49,25 +71,7 @@ The hero intake video is committed, so the page renders without regenerating any
   ```
 
   A hosted Postgres works just as well (Neon, Supabase, Render). The connection
-  string is the only thing that changes, which is why nothing in the code is
-  tied to a local file or a specific host.
-
-## Setup
-
-```bash
-npm install
-cp .env.example .env    # then add DATABASE_URL, SESSION_SECRET and GEMINI_API_KEY
-npm run db:init          # create tables from backend/server/schema.sql
-npm run db:seed          # create the demo admin and customer accounts
-```
-
-On Windows PowerShell: `Copy-Item .env.example .env`
-
-Generate a session secret with:
-
-```bash
-node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
-```
+  string is the only thing that changes.
 
 ## Running
 
@@ -93,13 +97,13 @@ talks to port 3000.
 ### Without an API key
 
 The server still boots. `POST /api/chat` returns `503 AI_DISABLED` and the chat
-widget falls back to canned answers, labelled **Demo Mode** in the UI so it is
-never mistaken for a live model response.
+widget falls back to general husbandry tips, labelled **Demo tips mode** in the
+UI so it is never mistaken for a live model response.
 
 ### Without a database
 
-The server still boots and the whole storefront works: browsing, the AI ration
-quiz and the chatbot need no account. Only `/api/auth` returns
+The server still boots and the whole storefront works: browsing, the ration
+calculator and the chatbot need no account. Only `/api/auth` returns
 `503 DB_DISABLED`, because there is nowhere to store an account.
 
 ## Environment variables
@@ -111,54 +115,56 @@ quiz and the chatbot need no account. Only `/api/auth` returns
 | `GEMINI_API_KEY` | yes, for live AI | - | Gemini credential, kept server-side only |
 | `GEMINI_MODEL` | no | `gemini-2.5-flash` | Model for chat replies |
 | `PORT` | no | `3001` | API port |
+| `APP_URL` | no | - | Absolute origin used in password-reset links |
 | `NODE_ENV` | no | - | Set to `production` so cookies are HTTPS-only |
+
+Generate a session secret with:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
 ## Accounts and roles
 
 Browsing is public. An account is required only where data is written: placing
-an order, and the staff dashboard.
+an order, khata, order tracking, and the staff dashboard.
 
 - Passwords are hashed with **scrypt** and a per-user random salt. The hash is
   never returned by any endpoint.
 - Sessions are a **JWT in an httpOnly, sameSite=lax cookie**, so the token is
-  unreachable from JavaScript. No session store is needed, which keeps the app
-  portable across hosts.
+  unreachable from JavaScript.
 - **Role comes from the database, never from the browser.** `POST /api/auth/register`
   hard-codes `role = 'customer'` and ignores a `role` field in the request body.
 - Login compares against a dummy hash when the email is unknown, so response
   timing does not reveal whether an account exists.
+- Staff can be revoked via `session_version` (bumped on password change or
+  forced logout).
 
-Demo accounts created by `npm run db:seed`:
-
-| Role | Email | Password |
-| --- | --- | --- |
-| Shop admin | `admin@pashufeed.test` | `Admin@12345` |
-| Counter staff | `counter@pashufeed.test` | `Counter@12345` |
-| Dairy farmer | `farmer@pashufeed.test` | `Farmer@12345` |
-
-Counter staff see only Overview, Inventory, POS and Delivery. Revenue, Khata,
-farmer directory, suppliers, promos, reports and settings are owner-only.
+Admin roles: `admin` (full dashboard) and `employee` (counter staff — Overview,
+Inventory, POS, Delivery; no Revenue/Khata/settings).
 
 ## Product catalogue
 
-Categories and products are read from the database at runtime, not bundled into
-the bundle. `backend/server/seed/catalogue.ts` holds the one-time seed; the running app
+Categories and products are read from the database at runtime.
+`backend/server/seed/catalogue.ts` holds the one-time seed; the running app
 never imports it.
 
-- `categories`, `products` and `product_variants` tables, plus a
-  `default_weight_kg` column for the pack size shown first on a product page.
-- Pack sizes (25 kg, 50 kg, 500 kg) are their own rows with their own price and
-  stock, because a 25 kg bag and a 50 kg bag are not the same line item.
+- Tables: `categories`, `products`, `product_variants`.
+- Pack sizes (e.g. 25 kg / 50 kg) are their own rows with their own price and
+  stock, because they are not the same line item.
 - Money is `NUMERIC`, never a float, so totals cannot drift.
 - Category `productCount` is counted in SQL, so a category can never advertise
   products it does not have.
 - `inStock` and the default pack size are derived from the variant rows at read
   time, so they cannot go stale.
-- The catalogue is public. Only writes need a session, and those arrive with the
-  orders feature.
+- Product images are optimised WebP files in `frontend/public/images/products/`
+  (`product-XX-800.webp` etc.). Regenerate with
+  `node scripts/optimise_catalogue_images.mjs` after adding source PNGs.
+- There is **no product-edit API** by design: inventory in the admin app is
+  read-only plus a CSV export. Catalogue changes go through the seed + re-run.
 
-To edit the catalogue, change the rows in the database (or
-`backend/server/seed/catalogue.ts` and re-run `npm run db:seed` on a fresh database).
+To edit the catalogue, change the rows in `backend/server/seed/catalogue.ts`
+and re-run `npm run db:seed` (safe to re-run — upserts).
 
 ## Other commands
 
@@ -167,15 +173,26 @@ npm run lint     # tsc --noEmit
 npm run build    # production bundle to frontend/dist/
 npm run preview  # serve the production bundle
 npm run db:init  # apply backend/server/schema.sql (safe to re-run)
-npm run db:seed  # upsert the demo accounts
+npm run db:seed  # upsert the demo accounts and catalogue
+node scripts/optimise_catalogue_images.mjs  # rebuild WebP product images
 ```
 
-## Parallax Background
+## What is real vs. demo
 
-The landing background uses a procedural particle animation rendered on a canvas.
-It responds to scroll progress with a Ken Burns style parallax effect. No external
-frame assets or ffmpeg are required. The animation respects `prefers-reduced-motion`
-and pauses in background tabs for performance.
+Everything shown in the UI against an account is backed by PostgreSQL:
+
+| Feature | Backing |
+| --- | --- |
+| Catalogue, pack sizes, stock | `products` + `product_variants` |
+| Orders (online + POS counter sales) | `orders` + `order_items`; server-side pricing, GST 5%, bulk delivery ₹500/5%, express ₹250, stock decrement |
+| Order status / payment | `PATCH /api/orders/:id/status`, `.../payment` |
+| Khata (credit ledger) | `khata_accounts` + `khata_entries` |
+| Chat assistant | Gemini when `GEMINI_API_KEY` is set; labelled demo tips otherwise |
+| Ration calculator | Local rule-based estimator over live catalogue SKUs; framed as an estimate with a disclaimer, not veterinary advice |
+| Wishlist | Browser `localStorage` only (no server account data) |
+
+There are no mock orders, mock khata rows, fake loyalty points, subscriptions
+or invented analytics. Empty states are shown until real rows exist.
 
 ## API
 
@@ -187,50 +204,64 @@ and pauses in background tabs for performance.
 | `POST` | `/api/auth/login` | Sign in, sets the session cookie |
 | `POST` | `/api/auth/logout` | Clears the session cookie |
 | `GET` | `/api/auth/me` | The signed-in user, or 401 |
+| `POST` | `/api/auth/password-reset` | Request reset; email logged without SMTP |
+| `POST` | `/api/auth/password-reset/confirm` | Set a new password with a valid token |
 | `GET` | `/api/products` | Catalogue; `?category=`, `?brand=`, `?q=` filters |
 | `GET` | `/api/products/:id` | One product by id or SKU |
 | `GET` | `/api/categories` | Categories with live product counts |
 | `GET` | `/api/orders` | Current user's orders (staff see all) |
 | `POST` | `/api/orders` | Place an order: server-side pricing, GST, stock decrement |
 | `PATCH` | `/api/orders/:id/status` | Update status (staff only) |
+| `PATCH` | `/api/orders/:id/payment` | Mark payment method / paid (staff only) |
+| `GET` | `/api/khata` | Khata accounts + entries (role-scoped) |
+| `POST` | `/api/khata` | Create/adjust a khata account (staff) |
+| `POST` | `/api/khata/:id/payment` | Record a khata payment |
+| `GET` | `/api/admin/access` | Recent admin access log |
+| `POST` | `/api/admin/block` | Block an IP |
+| `DELETE` | `/api/admin/block/:ip` | Unblock an IP |
 | `POST` | `/api/chat` | Chat reply; returns `{ text, actionBtn? }` |
+| `POST` | `/api/track` | Anonymous visit beacon (`visits` table) |
 
-`POST /api/chat` accepts `{ message, history, products, khataSummary }`. The
-product catalogue and Khata summary are passed to the model so replies reference
-real inventory and real balances. `actionBtn.view` is validated against a
-whitelist on the server before it reaches the UI.
+`POST /api/chat` accepts `{ message, history, role, userName, products, khataSummary }`.
+The product catalogue and Khata summary are passed to the model so replies
+reference real inventory and real balances. `actionBtn.view` is validated
+against a whitelist on the server before it reaches the UI.
 
-The API key is never sent to the browser.
+The API key is never sent to the browser. Chat requires a signed-in session.
 
 ## Project layout
 
 ```
 .
 ├── backend/
-│   └── server/             Express app, Gemini chat, orders, auth, schema.sql,
-│                           routes/, seed/
+│   └── server/             Express app, Gemini chat, schema.sql,
+│                           routes/ (auth, products, orders, khata, admin),
+│                           seed/ (catalogue.ts)
 ├── frontend/
 │   ├── index.html
 │   ├── vite.config.ts      (root: frontend/, proxies /api to :3001)
-│   ├── public/             videos/cow_eating.mp4 (local drop-in)
-│   └── src/                React app (components/, context/, hooks/, ...)
+│   ├── public/images/      product WebP assets + placeholder.svg
+│   └── src/                React app (components/, context/, data/, hooks/)
+├── scripts/
+│   └── optimise_catalogue_images.mjs
 ├── index config files      package.json, tsconfig.json, docker-compose.yml, .env
 ```
 
-Only `users` and the catalogue are persisted so far. Orders, the Khata ledger,
-subscriptions and analytics are still in-memory sample data from
-`frontend/src/data/mockData.ts`.
+## Design system
 
-## Media assets
+Warm light "field ledger" theme defined in `frontend/src/index.css`:
 
-Background video clips load from public Mixkit CDN URLs. Each video list starts
-with an optional local path that is skipped automatically when the file is
-absent, so you can drop in your own footage without touching the code:
+- Tokens: cream `#f7f2e7`, paper `#fffdf7`, ink `#1b2a22`, pine `#1f4d3a`,
+  ochre `#c8842a`, clay `#b4552d`, line `#e3dac8`
+- Type: Fraunces (display) + Manrope (body)
+- Utility classes: `.card`, `.btn` (+ `btn-primary` / `btn-accent` /
+  `btn-outline`), `.field`, `.eyebrow`
 
-- `public/videos/cow_eating.mp4` - hero background
+## Known limits
 
-The parallax background uses a procedural canvas animation (no video required).
-If the hero video fails, it falls back to the Mixkit CDN.
-
-Product and testimonial imagery loads from Unsplash CDN URLs defined in
-`frontend/src/data/mockData.ts`.
+- No SMTP: password-reset emails are logged by the server; in non-production the
+  reset URL is returned in the API response for development.
+- `npm audit` reports upstream advisories (esbuild / protobufjs chain via
+  tooling); review before a production deploy.
+- Full production verification (served `dist`, HTTPS cookies, reverse proxy)
+  has not been performed on a real host.

@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
-import { resolveMx } from 'node:dns/promises';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { isDbConfigured, query, DbUnavailableError } from '../db';
 import {
   hashPassword,
@@ -8,12 +9,13 @@ import {
   clearSessionCookie,
   setSessionCookie,
   currentUser,
+  issuePasswordResetToken,
+  resetPasswordWithToken,
   type SessionUser,
 } from '../auth';
 
 export const authRouter = Router();
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 
 /** 503 while DATABASE_URL is unset, so the storefront still runs without a DB. */
@@ -28,76 +30,105 @@ function dbGuard(_req: Request, res: Response, next: () => void): void {
   next();
 }
 
-/**
- * Format is cheap to fake, so also prove the domain can receive mail: it must
- * have at least one MX record. When DNS itself is unavailable (offline dev
- * machine) the check is skipped rather than locking real users out.
- */
-async function hasRealMailDomain(email: string): Promise<boolean> {
-  const domain = email.split('@')[1];
-  if (!domain) return false;
-  try {
-    const records = await resolveMx(domain);
-    return Array.isArray(records) && records.length > 0;
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException)?.code;
-    if (code === 'ENOTFOUND' || code === 'ENODATA') return false;
-    return true; // DNS/network failure: do not punish the user for our sandbox.
-  }
+const limiter = (limit: number, windowMs = 15 * 60 * 1000) =>
+  rateLimit({
+    windowMs,
+    limit,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    message: {
+      error: 'RATE_LIMITED',
+      message: 'Too many attempts. Please wait a few minutes and try again.',
+    },
+  });
+
+const loginLimiter = limiter(20);
+const registerLimiter = limiter(10, 60 * 60 * 1000);
+const forgotLimiter = limiter(5);
+const resetLimiter = limiter(10);
+
+const emailSchema = z.string().trim().max(254).refine(
+  (value) => value === '' || z.string().email().safeParse(value).success,
+  'Enter a valid email address.'
+);
+
+const registerSchema = z.object({
+  // Email is optional: a village customer who only has a phone number must not
+  // be forced to invent a fake address. When present it must be valid, and it
+  // unlocks the self-service password-reset link.
+  email: emailSchema.optional().default(''),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
+    .max(200, 'Password is too long.'),
+  name: z.string().trim().min(1, 'Enter your name.').max(120, 'Name is too long.'),
+  village: z.string().trim().max(120, 'Village name is too long.').optional().default(''),
+});
+
+// Login accepts EITHER the permanent customer ID (HT-CUS-10042) or the email.
+const loginSchema = z.object({
+  identifier: z.string().trim().min(3, 'Enter your Customer ID or email.').max(254),
+  password: z.string().min(1, 'Enter your password.').max(200),
+});
+
+const forgotSchema = z.object({ email: emailSchema });
+
+const resetSchema = z.object({
+  token: z.string().min(32, 'This reset link is invalid.').max(128),
+  password: z
+    .string()
+    .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
+    .max(200, 'Password is too long.'),
+});
+
+function normaliseEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function validationMessage(error: z.ZodError): string {
+  return error.issues[0]?.message ?? 'Check the details and try again.';
 }
 
 /** Never echo which part of the credentials was wrong. */
 function unauthorized(res: Response): void {
-  res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Email or password is incorrect.' });
+  res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Customer ID or password is incorrect.' });
 }
 
 function sendUser(res: Response, user: SessionUser): void {
   res.json({ user });
 }
 
-authRouter.post('/register', dbGuard, async (req, res) => {
-  const { email, password, name, village } = (req.body ?? {}) as {
-    email?: string;
-    password?: string;
-    name?: string;
-    village?: string;
-  };
+function appOrigin(req: Request): string {
+  const configured = process.env.APP_URL;
+  if (configured) return configured.replace(/\/$/, '');
+  return `${req.protocol}://${req.get('host')}`;
+}
 
-  const normalisedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+authRouter.post('/register', registerLimiter, dbGuard, async (req, res) => {
+  const parsed = registerSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: validationMessage(parsed.error) });
+    return;
+  }
 
-  if (!EMAIL_RE.test(normalisedEmail)) {
-    res.status(400).json({ error: 'BAD_EMAIL', message: 'Enter a valid email address.' });
-    return;
-  }
-  if (!(await hasRealMailDomain(normalisedEmail))) {
-    res.status(400).json({
-      error: 'EMAIL_UNREACHABLE',
-      message: 'That email domain does not look like a real mailbox. Use a valid email you can receive mail on.',
-    });
-    return;
-  }
-  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
-    res
-      .status(400)
-      .json({ error: 'WEAK_PASSWORD', message: `Password must be at least ${MIN_PASSWORD_LENGTH} characters.` });
-    return;
-  }
-  if (typeof name !== 'string' || !name.trim()) {
-    res.status(400).json({ error: 'BAD_NAME', message: 'Enter your name.' });
-    return;
-  }
+  const { password, name, village } = parsed.data;
+  // Blank means "no email"; anything else must be a real address (schema-checked).
+  const normalisedEmail = parsed.data.email ? normaliseEmail(parsed.data.email) : null;
 
   try {
     // Role is hard-coded to 'customer'. A client can never request 'admin'.
-    const rows = await query<SessionUser>(
-      `INSERT INTO users (email, password_hash, name, role, village)
-       VALUES ($1, $2, $3, 'customer', $4)
-       RETURNING id, email, name, role, village`,
-      [normalisedEmail, await hashPassword(password), name.trim(), typeof village === 'string' ? village.trim() || null : null]
+    // The permanent customer ID comes from a Postgres sequence, so two people
+    // registering at the same instant cannot be handed the same ID — the unique
+    // index would reject the second insert rather than silently collide.
+    const rows = await query<SessionUser & { session_version: number }>(
+      `INSERT INTO users (email, password_hash, name, role, village, customer_code)
+       VALUES ($1, $2, $3, 'customer', $4, 'HT-CUS-' || nextval('customer_code_seq'))
+       RETURNING id, email, customer_code AS "customerCode", name, role, village, session_version`,
+      [normalisedEmail, await hashPassword(password), name, village || null]
     );
 
-    const user = rows[0];
-    setSessionCookie(res, signSession(user));
+    const { session_version, ...user } = rows[0];
+    setSessionCookie(res, signSession(user, session_version));
     sendUser(res, user);
   } catch (error) {
     if (isUniqueViolation(error)) {
@@ -113,35 +144,40 @@ authRouter.post('/register', dbGuard, async (req, res) => {
   }
 });
 
-authRouter.post('/login', dbGuard, async (req, res) => {
-  const { email, password } = (req.body ?? {}) as { email?: string; password?: string };
-  const normalisedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
-
-  if (!normalisedEmail || typeof password !== 'string' || !password) {
+authRouter.post('/login', loginLimiter, dbGuard, async (req, res) => {
+  const parsed = loginSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
     unauthorized(res);
     return;
   }
 
+  const identifier = parsed.data.identifier.trim();
+
   try {
-    const rows = await query<SessionUser & { password_hash: string }>(
-      'SELECT id, email, name, role, village, password_hash FROM users WHERE lower(email) = $1',
-      [normalisedEmail]
+    // Match on the permanent customer ID or the email. customer_code comparison
+    // is upper-cased on both sides so "ht-cus-10042" also works; the email path
+    // stays lower-case as before.
+    const rows = await query<SessionUser & { password_hash: string; session_version: number }>(
+      `SELECT id, email, customer_code AS "customerCode", name, role, village, password_hash, session_version
+       FROM users
+       WHERE upper(customer_code) = upper($1) OR (email IS NOT NULL AND lower(email) = lower($1))`,
+      [identifier]
     );
 
     const user = rows[0];
     // Hash even when the user is missing so timing does not reveal whether the
     // email exists.
     const passwordMatches = user
-      ? await verifyPassword(password, user.password_hash)
-      : await verifyPassword(password, 'deadbeef:deadbeef');
+      ? await verifyPassword(parsed.data.password, user.password_hash)
+      : await verifyPassword(parsed.data.password, 'deadbeef:deadbeef');
 
     if (!user || !passwordMatches) {
       unauthorized(res);
       return;
     }
 
-    const { password_hash: _discarded, ...safeUser } = user;
-    setSessionCookie(res, signSession(safeUser));
+    const { password_hash: _discarded, session_version, ...safeUser } = user;
+    setSessionCookie(res, signSession(safeUser, session_version));
     sendUser(res, safeUser);
   } catch (error) {
     if (error instanceof DbUnavailableError) {
@@ -156,6 +192,75 @@ authRouter.post('/login', dbGuard, async (req, res) => {
 authRouter.post('/logout', (_req, res) => {
   clearSessionCookie(res);
   res.json({ ok: true });
+});
+
+/**
+ * Always answers with the same message so the endpoint cannot be used to list
+ * registered emails. The reset link is written to the server log until SMTP is
+ * configured; in development the link is also returned so the flow is testable.
+ */
+authRouter.post('/forgot-password', forgotLimiter, dbGuard, async (req, res) => {
+  const parsed = forgotSchema.safeParse(req.body ?? {});
+  const generic = {
+    ok: true,
+    message: 'If an account exists for that email, a reset link has been sent.',
+  };
+
+  if (!parsed.success) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: validationMessage(parsed.error) });
+    return;
+  }
+
+  const normalisedEmail = normaliseEmail(parsed.data.email);
+
+  try {
+    const rows = await query<{ id: number }>('SELECT id FROM users WHERE lower(email) = $1', [normalisedEmail]);
+    const user = rows[0];
+
+    if (user) {
+      const token = await issuePasswordResetToken(user.id);
+      const resetUrl = `${appOrigin(req)}/login?token=${encodeURIComponent(token)}`;
+      console.log(`[api/auth/forgot-password] reset link for ${normalisedEmail}: ${resetUrl}`);
+
+      if (process.env.NODE_ENV !== 'production') {
+        res.json({ ...generic, devResetUrl: resetUrl });
+        return;
+      }
+    }
+
+    res.json(generic);
+  } catch (error) {
+    console.error('[api/auth/forgot-password]', error);
+    // Do not let an internal failure become an account-existence signal.
+    res.json(generic);
+  }
+});
+
+authRouter.post('/reset-password', resetLimiter, dbGuard, async (req, res) => {
+  const parsed = resetSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'BAD_REQUEST', message: validationMessage(parsed.error) });
+    return;
+  }
+
+  try {
+    const updated = await resetPasswordWithToken(parsed.data.token, parsed.data.password);
+    if (!updated) {
+      res.status(400).json({
+        error: 'INVALID_TOKEN',
+        message: 'This reset link is invalid or has expired. Request a new one.',
+      });
+      return;
+    }
+    res.json({ ok: true, message: 'Password updated. Sign in with the new password.' });
+  } catch (error) {
+    if (error instanceof DbUnavailableError) {
+      res.status(503).json({ error: 'DB_DISABLED', message: 'Accounts are unavailable right now.' });
+      return;
+    }
+    console.error('[api/auth/reset-password]', error);
+    res.status(500).json({ error: 'SERVER_ERROR', message: 'Could not reset the password.' });
+  }
 });
 
 authRouter.get('/me', dbGuard, async (req, res) => {
@@ -189,7 +294,7 @@ authRouter.patch('/me', dbGuard, async (req, res) => {
       return;
     }
     const rows = await query<SessionUser>(
-      'UPDATE users SET name = COALESCE($1, name), village = COALESCE($2, village) WHERE id = $3 RETURNING id, email, name, role, village',
+      'UPDATE users SET name = COALESCE($1, name), village = COALESCE($2, village) WHERE id = $3 RETURNING id, email, customer_code AS "customerCode", name, role, village',
       [typeof name === 'string' ? name.trim() : null, typeof village === 'string' ? village.trim() : null, user.id]
     );
     sendUser(res, rows[0]);

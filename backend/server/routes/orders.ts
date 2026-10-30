@@ -168,6 +168,8 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
       shippingAddress?: Record<string, unknown>;
       paymentMethod?: string;
       deliveryType?: string;
+      /** Staff only: place the order for a signed-in customer (counter sale). */
+      customerUserId?: number;
     };
 
     if (!Array.isArray(body.items) || body.items.length === 0) {
@@ -186,6 +188,31 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
     if (!address?.fullName || !address?.phone || !address?.villageTown) {
       res.status(400).json({ error: 'BAD_ADDRESS', message: 'A complete delivery address is required.' });
       return;
+    }
+
+    // Counter sales are rung up by staff but belong to the farmer's account —
+    // especially for Khata Credit, which must hit THAT farmer's ledger. Only
+    // staff may name another customer; a customer's own request can never
+    // redirect an order (or a credit charge) onto someone else's account.
+    let orderUserId = user.id;
+    if (body.customerUserId !== undefined) {
+      if (user.role !== 'admin' && user.role !== 'employee') {
+        res.status(403).json({ error: 'FORBIDDEN', message: 'Only shop staff can place an order for another customer.' });
+        return;
+      }
+      if (!Number.isInteger(body.customerUserId) || body.customerUserId < 1) {
+        res.status(400).json({ error: 'BAD_REQUEST', message: 'A valid customer is required for a Khata sale.' });
+        return;
+      }
+      const target = await pool!.query<{ id: number }>(
+        `SELECT id FROM users WHERE id = $1 AND role = 'customer'`,
+        [body.customerUserId]
+      );
+      if (target.rows.length === 0) {
+        res.status(404).json({ error: 'NO_SUCH_USER', message: 'No such customer account.' });
+        return;
+      }
+      orderUserId = target.rows[0].id;
     }
 
     // Validate and price every line from the database - the client-sent price
@@ -258,17 +285,18 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
       // Credit is the shop's money, so the limit is checked here rather than in
       // the browser. This runs before the order row is written so a rejected
       // order leaves no trace, and it reuses the same transaction so the check
-      // and the charge cannot disagree.
+      // and the charge cannot disagree. Only an Approved account may buy on
+      // credit: Pending, Rejected, Suspended and Closed accounts are refused.
       let khataAccountId: number | null = null;
       if (body.paymentMethod === 'Khata Credit') {
-        const account = await client.query<{ id: number; credit_limit: string; outstanding: string }>(
-          `SELECT a.id, a.credit_limit,
-                  COALESCE(SUM(CASE WHEN e.entry_type = 'Purchase' THEN e.amount ELSE -e.amount END), 0) AS outstanding
+        const account = await client.query<{ id: number; credit_limit: string; outstanding: string; status: string }>(
+          `SELECT a.id, a.credit_limit, a.status,
+                  COALESCE(SUM(CASE WHEN e.is_debit THEN e.amount ELSE -e.amount END), 0) AS outstanding
            FROM khata_accounts a
            LEFT JOIN khata_entries e ON e.account_id = a.id
            WHERE a.user_id = $1
            GROUP BY a.id`,
-          [user.id]
+          [orderUserId]
         );
         const khata = account.rows[0];
         if (!khata) {
@@ -276,6 +304,17 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
           res.status(403).json({
             error: 'NO_KHATA_ACCOUNT',
             message: 'Khata Credit needs a credit account opened by the shop. Please pay at the counter.',
+          });
+          return;
+        }
+        if (khata.status !== 'Approved') {
+          await client.query('ROLLBACK');
+          res.status(403).json({
+            error: 'KHATA_NOT_APPROVED',
+            message:
+              khata.status === 'Pending'
+                ? 'Your Khata request is still pending review. Please pay by another method for now.'
+                : `Your Khata account is ${khata.status.toLowerCase()}. Please speak to the shop.`,
           });
           return;
         }
@@ -301,7 +340,7 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
          VALUES ('', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'Placed', $12, $13, 'Within 24-36 Hours')
          RETURNING id`,
         [
-          user.id,
+          orderUserId,
           address.fullName,
           address.phone,
           address.villageTown,
@@ -344,14 +383,15 @@ ordersRouter.post('/orders', dbGuard, async (req, res) => {
       // (order_id, entry_type) makes a retried checkout idempotent here.
       if (khataAccountId !== null) {
         await client.query(
-          `INSERT INTO khata_entries (account_id, entry_type, amount, notes, order_id)
-           VALUES ($1, 'Purchase', $2, $3, $4)
+          `INSERT INTO khata_entries (account_id, entry_type, amount, is_debit, notes, order_id, recorded_by)
+           VALUES ($1, 'Purchase', $2, true, $3, $4, $5)
            ON CONFLICT (order_id, entry_type) DO NOTHING`,
           [
             khataAccountId,
             totalAmount,
             `${lines.length} item(s) on Khata Credit (${orderNumber})`,
             orderId,
+            user.id,
           ]
         );
       }
@@ -430,17 +470,93 @@ ordersRouter.patch('/orders/:id/status', dbGuard, async (req, res) => {
       return;
     }
 
-    const updated = await pool!.query<OrderRow>(
-      'UPDATE orders SET status = $1 WHERE id = $2 RETURNING *',
-      [status, id]
-    );
-    if (updated.rows.length === 0) {
-      res.status(404).json({ error: 'NOT_FOUND', message: 'No such order.' });
+    const client = await pool!.connect();
+    try {
+      await client.query('BEGIN');
+      const current = await client.query<{ id: number; status: string; payment_method: string; total_amount: string }>(
+        'SELECT id, status, payment_method, total_amount FROM orders WHERE id = $1 FOR UPDATE',
+        [id]
+      );
+      const order = current.rows[0];
+      if (!order) {
+        await client.query('ROLLBACK');
+        res.status(404).json({ error: 'NOT_FOUND', message: 'No such order.' });
+        return;
+      }
+
+      if (order.status === 'Cancelled') {
+        await client.query('ROLLBACK');
+        res.status(409).json({
+          error: 'ALREADY_CANCELLED',
+          message: 'This order is cancelled and cannot be reopened. Record a new order or a ledger adjustment instead.',
+        });
+        return;
+      }
+
+      if (status === 'Cancelled') {
+        // Cancellation must not erase money already booked: the stock goes back
+        // and, for a Khata order, a reversing Adjustment is written against the
+        // original Purchase in the same transaction. The original entry stays —
+        // the ledger remains auditable. The unique (order_id, entry_type)
+        // constraint plus this existence check make a repeated cancel idempotent.
+        const items = await client.query<{ product_id: string; weight_kg: string; quantity: number }>(
+          'SELECT product_id, weight_kg, quantity FROM order_items WHERE order_id = $1',
+          [id]
+        );
+        for (const item of items.rows) {
+          await client.query(
+            'UPDATE product_variants SET stock = stock + $1 WHERE product_id = $2 AND weight_kg = $3',
+            [item.quantity, item.product_id, item.weight_kg]
+          );
+          await client.query(
+            'UPDATE products SET stock_count = stock_count + $1 WHERE id = $2',
+            [item.quantity, item.product_id]
+          );
+        }
+
+        if (order.payment_method === 'Khata Credit') {
+          const purchase = await client.query<{ id: number; account_id: number; amount: string; is_debit: boolean }>(
+            `SELECT id, account_id, amount, is_debit FROM khata_entries
+             WHERE order_id = $1 AND entry_type = 'Purchase'`,
+            [id]
+          );
+          const entry = purchase.rows[0];
+          if (entry) {
+            await client.query(
+              `INSERT INTO khata_entries (account_id, entry_type, amount, is_debit, notes, order_id, recorded_by, reverses_entry_id)
+               VALUES ($1, 'Adjustment', $2, $3, $4, $5, $6, $7)
+               ON CONFLICT (order_id, entry_type) DO NOTHING`,
+              [
+                entry.account_id,
+                entry.amount,
+                !entry.is_debit,
+                `Cancellation reversal for order ${order.id}`,
+                order.id,
+                user.id,
+                entry.id,
+              ]
+            );
+          }
+        }
+      }
+
+      const updated = await client.query<OrderRow>('UPDATE orders SET status = $1 WHERE id = $2 RETURNING *', [status, id]);
+      await client.query('COMMIT');
+
+      const itemResult = await pool!.query<ItemRow>('SELECT * FROM order_items WHERE order_id = $1', [id]);
+      res.json({ order: toOrder(updated.rows[0], itemResult.rows) });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    if (error instanceof DbUnavailableError) {
+      res.status(503).json({ error: 'DB_DISABLED', message: 'Database is unavailable.' });
       return;
     }
-    res.json({ order: toOrder(updated.rows[0], []) });
-  } catch (error) {
     console.error('[api/orders PATCH]', error);
-    res.status(500).json({ error: 'SERVER_ERROR', message: 'Could not update the order.' });
+    res.status(500).json({ error: 'SERVER_ERROR', message: 'Could not update the order status.' });
   }
 });

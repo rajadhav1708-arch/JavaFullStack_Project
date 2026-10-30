@@ -7,6 +7,7 @@ coverage/
 .env.local
 .env.*.local
 !.env.example
+.vercel/
 
 *.log
 npm-debug.log*
@@ -19,3 +20,5 @@ Thumbs.db
 # generated source clips (kept out of the repo; frames are committed)
 *.mp4
 !frontend/public/videos/cow_eating.mp4
+.vercel
+.env*

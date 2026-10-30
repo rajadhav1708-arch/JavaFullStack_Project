@@ -3,7 +3,10 @@ export type UserRole = 'customer' | 'admin' | 'employee';
 /** The signed-in user as returned by GET /api/auth/me. Never carries the password hash. */
 export interface AuthUser {
   id: number;
+  /** Optional: a customer who registered without an email has none. */
   email: string;
+  /** Permanent public ID (HT-CUS-10042). Stable for life; safe to log in with. */
+  customerCode: string;
   name: string;
   role: UserRole;
   village: string | null;
@@ -30,13 +33,7 @@ export type AdminTab =
   | 'inventory'
   | 'pos'
   | 'khata'
-  | 'crm'
-  | 'suppliers'
-  | 'delivery'
-  | 'offers'
-  | 'reports'
-  | 'access'
-  | 'settings';
+  | 'delivery';
 
 
 export type ProductCategory =
@@ -213,6 +210,9 @@ export interface Order {
 export interface KhataRecord {
   id: string;
   customerId: string;
+  /** Permanent customer ID of the linked site account, when there is one. */
+  customerCode?: string;
+  customerEmail?: string;
   customerName: string;
   phone: string;
   village: string;
@@ -220,18 +220,37 @@ export interface KhataRecord {
   milkUnionMemberId?: string;
   totalCreditLimit: number;
   totalOutstanding: number;
+  /** How much of the limit can still be used for a new credit purchase. */
+  availableCredit: number;
   paidAmount: number;
+  /** Lifetime total of credit purchases on this account. */
+  purchaseTotal: number;
   lastPurchaseDate: string;
   dueDate: string;
-  status: 'Paid' | 'Partially Paid' | 'Due' | 'Overdue';
-  transactions: {
-    id: string;
-    date: string;
-    type: 'Purchase' | 'Payment';
-    amount: number;
-    notes: string;
-    orderNumber?: string;
-  }[];
+  /** Lifecycle: has the shop approved this farmer for credit? */
+  status: 'Pending' | 'Approved' | 'Rejected' | 'Suspended' | 'Closed';
+  rejectionReason?: string;
+  requestedLimit?: number;
+  decidedAt?: string;
+  /** Derived payment standing, independent of the lifecycle status. */
+  paymentStatus: 'Paid' | 'Partially Paid' | 'Due' | 'Overdue';
+  entryCount: number;
+  transactions: KhataTransaction[];
+}
+
+export interface KhataTransaction {
+  id: string;
+  date: string;
+  type: 'Purchase' | 'Payment' | 'Adjustment';
+  amount: number;
+  /** TRUE increases what the farmer owes; FALSE reduces it. */
+  isDebit: boolean;
+  notes: string;
+  orderNumber?: string;
+  paymentMethod?: string;
+  recordedBy?: string;
+  /** Set on an Adjustment: the entry being corrected. */
+  reversesEntryId?: string;
 }
 
 export type KhataAccount = KhataRecord;
@@ -247,19 +266,6 @@ export interface Supplier {
   leadTimeDays: number;
   activeOrders: number;
   rating: number;
-}
-
-export interface Subscription {
-  id: string;
-  productName: string;
-  brand: string;
-  weightKg: number;
-  quantity: number;
-  frequencyDays: number;
-  nextDeliveryDate: string;
-  status: 'Active' | 'Paused' | 'Cancelled';
-  deliveryAddress: string;
-  pricePerDelivery: number;
 }
 
 export interface RationRecommendationInput {
@@ -280,10 +286,10 @@ export interface FeedRecommendationResult {
     dailyQtyKg: number;
     reasoning: string;
   }[];
-  expectedYieldIncrease: string;
-  estimatedFatBoost: string;
+  targetFatPercent: number;
   healthBenefits: string[];
   monthlyCostEstimate: number;
+  disclaimer: string;
 }
 
 export interface NotificationItem {

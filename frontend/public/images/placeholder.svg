@@ -1,11 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="800" height="450" viewBox="0 0 800 450">
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#064e3b"/>
-      <stop offset="1" stop-color="#022c22"/>
+      <stop offset="0" stop-color="#f7f2e7"/>
+      <stop offset="1" stop-color="#e7efe8"/>
     </linearGradient>
   </defs>
-  <rect width="800" height="450" fill="url(#g)"/>
-  <text x="400" y="215" fill="#a7f3d0" font-family="sans-serif" font-size="28" font-weight="bold" text-anchor="middle">PashuFeed Pro</text>
-  <text x="400" y="255" fill="#34d399" font-family="sans-serif" font-size="16" text-anchor="middle">Image loading...</text>
+  <rect width="800" height="600" fill="url(#g)"/>
+  <path d="M400 300c-45 0-80-32-80-75 0-42 35-80 80-105 45 25 80 63 80 105 0 43-35 75-80 75Z" fill="#1f4d3a" opacity="0.12"/>
+  <text x="400" y="330" fill="#1f4d3a" font-family="Georgia, serif" font-size="28" font-weight="600" text-anchor="middle">Hindavi Traders</text>
+  <text x="400" y="362" fill="#55635b" font-family="sans-serif" font-size="15" text-anchor="middle">Product image unavailable</text>
 </svg>

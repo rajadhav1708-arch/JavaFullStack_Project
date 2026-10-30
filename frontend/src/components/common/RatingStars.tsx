@@ -17,19 +17,13 @@ export const RatingStars: React.FC<RatingStarsProps> = ({ rating, count, size = 
           <Star
             key={star}
             className={`${iconSize} ${
-              star <= Math.round(rating)
-                ? 'text-amber-500 fill-amber-500'
-                : 'text-slate-300 dark:text-slate-600'
+              star <= Math.round(rating) ? 'fill-ochre text-ochre' : 'text-line'
             }`}
           />
         ))}
       </div>
-      <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 ml-1">
-        {rating.toFixed(1)}
-      </span>
-      {count !== undefined && (
-        <span className="text-xs text-slate-500 dark:text-slate-400">({count})</span>
-      )}
+      <span className="ml-1 text-xs font-semibold text-ink">{rating.toFixed(1)}</span>
+      {count !== undefined && <span className="text-xs text-ink-soft">({count})</span>}
     </div>
   );
 };

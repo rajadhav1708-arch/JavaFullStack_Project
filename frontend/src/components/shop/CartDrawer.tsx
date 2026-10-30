@@ -2,28 +2,16 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../../context/AppContext';
 import { useNavigate } from 'react-router-dom';
+import { useLanguage } from '../../context/LanguageContext';
 import { ProductImage } from '../common/ProductImage';
 import { formatCartVariantLabel, summariseCartUnits } from '../../utils/variants';
-import {
-  X,
-  Trash2,
-  ShoppingBag,
-  ArrowRight,
-  Truck,
-  Plus,
-  Minus,
-} from 'lucide-react';
+import { X, Trash2, ShoppingBag, ArrowRight, Plus, Minus } from 'lucide-react';
 
 export const CartDrawer: React.FC = () => {
-  const {
-    isCartDrawerOpen,
-    setIsCartDrawerOpen,
-    cart,
-    removeFromCart,
-    updateCartQuantity,
-    cartTotal,
-  } = useApp();
+  const { isCartDrawerOpen, setIsCartDrawerOpen, cart, removeFromCart, updateCartQuantity, cartTotal } =
+    useApp();
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   if (!isCartDrawerOpen) return null;
 
@@ -43,72 +31,64 @@ export const CartDrawer: React.FC = () => {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
-        className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs"
+        className="no-print fixed inset-0 z-50 bg-ink/40 backdrop-blur-sm"
+        onClick={() => setIsCartDrawerOpen(false)}
       >
         <motion.div
           initial={{ x: '100%' }}
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="bg-white w-full max-w-md h-full flex flex-col justify-between shadow-2xl relative"
+          onClick={(event) => event.stopPropagation()}
+          className="relative flex h-full w-full max-w-md flex-col justify-between bg-paper shadow-2xl"
         >
-          {/* Header */}
-          <div className="p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+          <div className="flex items-center justify-between border-b border-line bg-cream/60 p-5">
             <div className="flex items-center gap-2">
-              <ShoppingBag className="w-5 h-5 text-emerald-700" />
-              <h2 className="font-extrabold text-slate-900 text-base">Your Cart ({cart.length} Feeds)</h2>
+              <ShoppingBag className="h-5 w-5 text-pine" />
+              <h2 className="text-base font-bold text-ink">
+                {t('cart.title')}
+                <span className="ml-2 text-xs font-semibold text-ink-soft">
+                  {cart.length === 1 ? t('cart.lineCountOne') : t('cart.lineCount', { n: cart.length })}
+                </span>
+              </h2>
             </div>
-            <motion.button
-              whileHover={{ scale: 1.1 }}
-              whileTap={{ scale: 0.9 }}
+            <button
               onClick={() => setIsCartDrawerOpen(false)}
-              className="p-1.5 text-slate-400 hover:text-slate-800 rounded-lg transition-colors cursor-pointer"
+              className="rounded-lg p-1.5 text-ink-soft transition-colors hover:bg-cream hover:text-ink"
+              aria-label={t('cart.close')}
             >
-              <X className="w-5 h-5" />
-            </motion.button>
+              <X className="h-5 w-5" />
+            </button>
           </div>
 
-          {/* Cart Item List */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto p-5">
             {cart.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="text-center py-16 space-y-3"
-              >
-                <motion.div
-                  animate={{ rotate: [0, 5, -5, 0] }}
-                  transition={{ duration: 2, repeat: Infinity }}
-                  className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400"
-                >
-                  <ShoppingBag className="w-8 h-8" />
-                </motion.div>
-                <h3 className="font-bold text-slate-800 text-sm">Your Feed Cart is Empty</h3>
-                <p className="text-xs text-slate-500 max-w-xs mx-auto">
-                  Explore our certified cattle feeds, calcium gels, and bypass fat supplements.
-                </p>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+              <div className="space-y-3 py-16 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-pine-soft text-pine">
+                  <ShoppingBag className="h-7 w-7" />
+                </div>
+                <h3 className="text-sm font-bold text-ink">{t('cart.emptyTitle')}</h3>
+                <p className="mx-auto max-w-xs text-xs leading-relaxed text-ink-soft">{t('cart.emptyBody')}</p>
+                <button
                   onClick={() => {
                     setIsCartDrawerOpen(false);
                     navigate('/shop');
                   }}
-                  className="mt-2 bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold px-4 py-2.5 rounded-xl cursor-pointer"
+                  className="btn btn-primary mt-2"
                 >
-                  Browse Feed Store
-                </motion.button>
-              </motion.div>
+                  {t('cart.emptyCta')}
+                </button>
+              </div>
             ) : (
-              <AnimatePresence>
-                {cart.map((item, idx) => (
+              <AnimatePresence initial={false}>
+                {cart.map((item) => (
                   <motion.div
-                    key={`${item.product.id}-${item.weightKg}-${idx}`}
+                    key={`${item.product.id}-${item.weightKg}`}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: -20 }}
-                    transition={{ duration: 0.3 }}
-                    className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-3"
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center justify-between gap-3 rounded-2xl border border-line bg-cream/50 p-3.5"
                   >
                     <ProductImage
                       src={item.product.image}
@@ -116,101 +96,89 @@ export const CartDrawer: React.FC = () => {
                       eager
                       width={64}
                       height={64}
-                      className="w-16 h-16 object-cover rounded-xl border border-slate-200 shrink-0"
+                      className="h-16 w-16 shrink-0 rounded-xl border border-line object-cover"
                     />
 
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[10px] font-bold text-emerald-800 uppercase">{item.product.brand}</div>
-                      <h4 className="text-xs font-bold text-slate-900 truncate">{item.product.name}</h4>
-                      <div className="text-[11px] text-slate-500 mt-0.5">
-                        {formatCartVariantLabel(item.product, item.weightKg)} {item.isSubscription && <span className="text-amber-700 font-bold">(Auto-Deliver)</span>}
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wide text-pine">
+                        {item.product.brand}
+                      </p>
+                      <h4 className="truncate text-xs font-bold text-ink">{item.product.name}</h4>
+                      <p className="mt-0.5 text-[11px] text-ink-soft">
+                        {formatCartVariantLabel(item.product, item.weightKg)}
+                      </p>
 
-                      <div className="flex items-center justify-between mt-2">
-                        <div className="text-xs font-black text-slate-900">
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-xs font-bold text-ink">
                           ₹{(item.price * item.quantity).toLocaleString('en-IN')}
-                        </div>
+                        </p>
 
-                        {/* Quantity Selector */}
-                        <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden text-xs">
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => updateCartQuantity(item.product.id, item.weightKg, item.quantity - 1)}
-                            className="px-2 py-0.5 text-slate-700 hover:bg-slate-100 font-bold"
+                        <div className="flex items-center overflow-hidden rounded-lg border border-line bg-paper text-xs">
+                          <button
+                            onClick={() =>
+                              updateCartQuantity(item.product.id, item.weightKg, item.quantity - 1)
+                            }
+                            className="px-2 py-1 text-ink-soft hover:bg-cream hover:text-ink"
+                            aria-label={t('cart.decrease')}
                           >
-                            <Minus className="w-3 h-3" />
-                          </motion.button>
-                          <span className="px-2 font-bold text-slate-900">{item.quantity}</span>
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.9 }}
-                            onClick={() => updateCartQuantity(item.product.id, item.weightKg, item.quantity + 1)}
-                            className="px-2 py-0.5 text-slate-700 hover:bg-slate-100 font-bold"
+                            <Minus className="h-3 w-3" />
+                          </button>
+                          <span className="px-2 font-bold text-ink">{item.quantity}</span>
+                          <button
+                            onClick={() =>
+                              updateCartQuantity(item.product.id, item.weightKg, item.quantity + 1)
+                            }
+                            className="px-2 py-1 text-ink-soft hover:bg-cream hover:text-ink"
+                            aria-label={t('cart.increase')}
                           >
-                            <Plus className="w-3 h-3" />
-                          </motion.button>
+                            <Plus className="h-3 w-3" />
+                          </button>
                         </div>
                       </div>
                     </div>
 
-                    <motion.button
-                      whileHover={{ scale: 1.2 }}
-                      whileTap={{ scale: 0.8 }}
+                    <button
                       onClick={() => removeFromCart(item.product.id, item.weightKg)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer"
-                      title="Remove item"
+                      className="rounded-lg p-1.5 text-ink-soft hover:bg-clay/10 hover:text-clay"
+                      title={t('cart.remove')}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </motion.button>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
                   </motion.div>
                 ))}
               </AnimatePresence>
             )}
           </div>
 
-          {/* Footer Summary & Checkout CTA */}
           {cart.length > 0 && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="p-5 border-t border-slate-200 bg-white space-y-3"
+              className="space-y-3 border-t border-line bg-paper p-5"
             >
-              {/* Order contents summary */}
-              <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-900 text-xs flex items-center justify-between gap-3">
-                <div className="flex items-center gap-1.5 font-bold shrink-0">
-                  <Truck className="w-4 h-4 text-emerald-700" />
-                  <span>Order Contents:</span>
-                </div>
-                <span className="font-black text-emerald-800 text-right truncate">
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-pine-soft p-2.5 text-xs">
+                <span className="shrink-0 font-bold text-pine">{t('cart.contents')}</span>
+                <span className="truncate text-right font-semibold text-pine/80">
                   {cartUnits.join(' · ')}
                 </span>
               </div>
 
-              <div className="space-y-1.5 text-xs text-slate-600">
+              <div className="space-y-1.5 text-xs text-ink-soft">
                 <div className="flex items-center justify-between">
-                  <span>Subtotal ({cart.length} items)</span>
-                  <span className="font-bold text-slate-900">₹{cartTotal.toLocaleString('en-IN')}</span>
+                  <span>{t('cart.subtotal')}</span>
+                  <span className="font-bold text-ink">₹{cartTotal.toLocaleString('en-IN')}</span>
                 </div>
-                <div className="flex items-center justify-between text-emerald-700 font-semibold">
-                  <span>Village Freight Discount</span>
-                  <span>FREE</span>
-                </div>
-                <div className="flex items-center justify-between text-slate-900 font-extrabold text-sm pt-2 border-t border-slate-100">
-                  <span>Total Amount Payable</span>
-                  <span className="text-emerald-800">₹{cartTotal.toLocaleString('en-IN')}</span>
+                <p className="text-[11px]">{t('cart.gstDeliveryNote')}</p>
+                <div className="flex items-center justify-between border-t border-line pt-2 text-sm font-bold text-ink">
+                  <span>{t('cart.estimatedTotal')}</span>
+                  <span className="font-display text-lg">₹{cartTotal.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleProceedCheckout}
-                className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs sm:text-sm py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
-              >
-                <span>Proceed to Checkout</span>
-                <ArrowRight className="w-4 h-4" />
-              </motion.button>
+              <button onClick={handleProceedCheckout} className="btn btn-primary w-full">
+                {t('cart.checkout')}
+                <ArrowRight className="h-4 w-4" />
+              </button>
             </motion.div>
           )}
         </motion.div>

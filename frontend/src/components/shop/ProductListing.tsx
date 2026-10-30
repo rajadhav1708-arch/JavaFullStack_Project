@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { Product } from '../../types';
 import { RatingStars } from '../common/RatingStars';
 import { ProductImage } from '../common/ProductImage';
@@ -19,8 +20,6 @@ import {
   X,
 } from 'lucide-react';
 
-/** Drives the "Suitable Animal" filter. Kept in one place because it appears in
- *  both the desktop sidebar and the mobile drawer. */
 const ANIMAL_FILTERS = ['All', 'Cow', 'Buffalo', 'Calf', 'Pregnant Heifer'] as const;
 
 export const ProductListing: React.FC = () => {
@@ -33,65 +32,50 @@ export const ProductListing: React.FC = () => {
     setSelectedCategory,
     searchQuery,
     setSearchQuery,
-    addToCart,
-    wishlist,
-    toggleWishlist,
-    setSelectedProduct,
   } = useApp();
+  const { t } = useLanguage();
 
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [selectedBrand, setSelectedBrand] = useState<string>('All');
+  const [selectedBrand, setSelectedBrand] = useState('All');
   const [selectedAnimal, setSelectedAnimal] = useState<string>('All');
   const [sortBy, setSortBy] = useState<'popular' | 'price-asc' | 'price-desc' | 'rating'>('popular');
-  const [onlyInStock, setOnlyInStock] = useState<boolean>(false);
-  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState<boolean>(false);
+  const [onlyInStock, setOnlyInStock] = useState(false);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
-  // Extract unique brands
-  const brands = useMemo(() => {
-    const list = Array.from(new Set(products.map((p) => p.brand)));
-    return ['All', ...list];
-  }, [products]);
+  const brands = useMemo(
+    () => ['All', ...Array.from(new Set(products.map((product) => product.brand)))],
+    [products]
+  );
 
-  // Filter & Sort Logic
-  const filteredProducts = useMemo(() => {
-    return products
-      .filter((p) => {
-        // Category filter
-        if (selectedCategory !== 'All' && p.category !== selectedCategory) {
-          return false;
-        }
-        // Brand filter
-        if (selectedBrand !== 'All' && p.brand !== selectedBrand) {
-          return false;
-        }
-        // Animal filter
-        if (selectedAnimal !== 'All' && !p.suitableFor.includes(selectedAnimal as any)) {
-          return false;
-        }
-        // In-stock filter
-        if (onlyInStock && !p.inStock) {
-          return false;
-        }
-        // Search query
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          const matchName = p.name.toLowerCase().includes(q);
-          const matchBrand = p.brand.toLowerCase().includes(q);
-          const matchCat = p.category.toLowerCase().includes(q);
-          const matchDesc = p.description.toLowerCase().includes(q);
-          if (!matchName && !matchBrand && !matchCat && !matchDesc) {
+  const filteredProducts = useMemo(
+    () =>
+      products
+        .filter((product) => {
+          if (selectedCategory !== 'All' && product.category !== selectedCategory) return false;
+          if (selectedBrand !== 'All' && product.brand !== selectedBrand) return false;
+          if (
+            selectedAnimal !== 'All' &&
+            !product.suitableFor.includes(selectedAnimal as Product['suitableFor'][number])
+          ) {
             return false;
           }
-        }
-        return true;
-      })
-      .sort((a, b) => {
-        if (sortBy === 'price-asc') return a.price - b.price;
-        if (sortBy === 'price-desc') return b.price - a.price;
-        if (sortBy === 'rating') return b.rating - a.rating;
-        return (b.reviewCount || 0) - (a.reviewCount || 0); // default popular
-      });
-  }, [products, selectedCategory, selectedBrand, selectedAnimal, onlyInStock, searchQuery, sortBy]);
+          if (onlyInStock && !product.inStock) return false;
+          if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            return [product.name, product.brand, product.category, product.description].some((field) =>
+              field.toLowerCase().includes(query)
+            );
+          }
+          return true;
+        })
+        .sort((a, b) => {
+          if (sortBy === 'price-asc') return a.price - b.price;
+          if (sortBy === 'price-desc') return b.price - a.price;
+          if (sortBy === 'rating') return b.rating - a.rating;
+          return (b.reviewCount || 0) - (a.reviewCount || 0);
+        }),
+    [products, selectedCategory, selectedBrand, selectedAnimal, onlyInStock, searchQuery, sortBy]
+  );
 
   const resetFilters = () => {
     setSelectedCategory('All');
@@ -101,259 +85,194 @@ export const ProductListing: React.FC = () => {
     setSearchQuery('');
   };
 
-  // The catalogue comes from the API, so distinguish "still loading" and "the
-  // database is unreachable" from a genuine "no products match" result.
   if (isCatalogueLoading) {
     return (
-      <div className="bg-transparent text-slate-100 min-h-screen py-8 relative z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center py-24">
-            <div className="inline-block w-8 h-8 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
-            <p className="mt-4 text-sm text-slate-500">Loading the catalogue...</p>
-          </div>
-        </div>
+      <div className="min-h-screen bg-cream py-24 text-center">
+        <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-pine border-t-transparent" />
+        <p className="mt-4 text-sm text-ink-soft">{t('shop.loading')}</p>
       </div>
     );
   }
 
   if (catalogueError) {
     return (
-      <div className="bg-transparent text-slate-100 min-h-screen py-8 relative z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center py-24 max-w-md mx-auto">
-            <p className="text-lg font-bold text-slate-900">Catalogue unavailable</p>
-            <p className="mt-2 text-sm text-slate-500">{catalogueError}</p>
-          </div>
+      <div className="min-h-screen bg-cream py-24">
+        <div className="mx-auto max-w-md text-center">
+          <h1 className="text-lg font-bold text-ink">{t('shop.errorTitle')}</h1>
+          <p className="mt-2 text-sm text-ink-soft">{catalogueError}</p>
+          <button onClick={() => window.location.reload()} className="btn btn-primary mt-5">
+            {t('shop.errorCta')}
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="bg-transparent text-slate-100 min-h-screen py-8 relative z-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Breadcrumb & Header Title */}
+    <div className="min-h-screen bg-cream py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="mb-6">
-          <div className="text-xs font-medium text-slate-500 mb-1">
-            Home &gt;{' '}
-            <span className="text-emerald-800 font-bold">
-              {selectedCategory === 'All' ? 'Full Catalogue' : selectedCategory}
+          <p className="text-[11px] font-semibold text-ink-soft">
+            {t('shop.breadcrumbHome')} /{' '}
+            <span className="text-pine">
+              {selectedCategory === 'All' ? t('shop.breadcrumbCatalogue') : selectedCategory}
             </span>
-          </div>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          </p>
+          <div className="mt-1 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-                Cattle Feeds, Dairy Gear & Farm Supplies
-              </h1>
-              <p className="text-slate-500 text-xs sm:text-sm mt-1">
-                Showing {filteredProducts.length} products across feeds, supplements, dairy equipment, hardware and field gear.
+              <h1 className="text-2xl text-ink sm:text-3xl">{t('shop.title')}</h1>
+              <p className="mt-1 text-xs text-ink-soft sm:text-sm">
+                {filteredProducts.length === 1
+                  ? t('shop.productCountOne')
+                  : t('shop.productCount', { count: filteredProducts.length })}
               </p>
             </div>
 
-            {/* Quick Search Bar */}
             <div className="relative w-full sm:w-72">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
               <input
                 type="text"
-                placeholder="Search products..."
+                placeholder={t('shop.searchPlaceholder')}
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white border border-slate-200 text-slate-800 text-xs rounded-xl pl-9 pr-8 py-2.5 outline-none focus:border-emerald-600 shadow-2xs"
+                onChange={(event) => setSearchQuery(event.target.value)}
+                className="field !pl-9 !pr-8"
               />
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-700"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-soft hover:text-ink"
+                  aria-label={t('common.close')}
                 >
-                  <X className="w-4 h-4" />
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
           </div>
         </div>
 
-        {/* Category Filter Pills Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-3 mb-6 scrollbar-none">
-          <button
-            onClick={() => setSelectedCategory('All')}
-            className={`whitespace-nowrap text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer ${
-              selectedCategory === 'All'
-                ? 'bg-emerald-800 text-white shadow-xs'
-                : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-            }`}
-          >
-            All Feeds
-          </button>
-          {categories.map((cat) => (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`whitespace-nowrap text-xs font-bold px-4 py-2 rounded-xl transition-all cursor-pointer ${
-                selectedCategory === cat.id
-                  ? 'bg-emerald-800 text-white shadow-xs'
-                  : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
-              }`}
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-1">
+          <CategoryPill active={selectedCategory === 'All'} onClick={() => setSelectedCategory('All')}>
+            {t('shop.allProducts')}
+          </CategoryPill>
+          {categories.map((category) => (
+            <CategoryPill
+              key={category.id}
+              active={selectedCategory === category.id}
+              onClick={() => setSelectedCategory(category.id)}
             >
-              {cat.name}
-            </button>
+              {category.name}
+            </CategoryPill>
           ))}
         </div>
 
-        {/* Main Content Layout (Sidebar Filters + Grid/List) */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Desktop Filter Sidebar */}
-          <div className="hidden lg:block space-y-6">
-            <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-xs space-y-6">
-              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-                  <SlidersHorizontal className="w-4 h-4 text-emerald-700" />
-                  <span>Filter Products</span>
-                </div>
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
+          <aside className="hidden space-y-6 lg:block">
+            <div className="card space-y-6 p-5">
+              <div className="flex items-center justify-between border-b border-line pb-3">
+                <span className="flex items-center gap-2 text-sm font-bold text-ink">
+                  <SlidersHorizontal className="h-4 w-4 text-pine" />
+                  {t('shop.filters')}
+                </span>
                 <button
                   onClick={resetFilters}
-                  className="text-[11px] font-semibold text-emerald-700 hover:underline flex items-center gap-1 cursor-pointer"
+                  className="flex items-center gap-1 text-[11px] font-semibold text-pine hover:underline"
                 >
-                  <RotateCcw className="w-3 h-3" />
-                  <span>Reset All</span>
+                  <RotateCcw className="h-3 w-3" />
+                  {t('shop.reset')}
                 </button>
               </div>
 
-              {/* Animal Type Filter */}
+              <AnimalFilter value={selectedAnimal} onChange={setSelectedAnimal} />
+
               <div>
-                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
-                  Suitable Animal
-                </label>
-                <p className="text-[11px] text-slate-400 mb-2 leading-relaxed">
-                  Feeds and supplements only. Hardware and equipment show under All Animals.
-                </p>
-                <div className="space-y-1.5 text-xs">
-                  {ANIMAL_FILTERS.map((animal) => (
-                    <label
-                      key={animal}
-                      className="flex items-center gap-2 text-slate-700 hover:text-slate-900 cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="animalType"
-                        checked={selectedAnimal === animal}
-                        onChange={() => setSelectedAnimal(animal)}
-                        className="text-emerald-700 focus:ring-emerald-500"
-                      />
-                      <span>{animal === 'All' ? 'All Animals' : animal}</span>
-                    </label>
-                  ))}
-                </div>
+                <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink">{t('shop.brand')}</p>
+                <select value={selectedBrand} onChange={(event) => setSelectedBrand(event.target.value)} className="field">
+                {brands.map((brand) => (
+                  <option key={brand} value={brand}>
+                    {brand === 'All' ? t('shop.allBrands') : brand}
+                  </option>
+                ))}
+              </select>
               </div>
 
-              {/* Brand Filter */}
-              <div>
-                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block mb-2">
-                  Brand
-                </label>
-                <select
-                  value={selectedBrand}
-                  onChange={(e) => setSelectedBrand(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-800 text-xs rounded-xl p-2.5 outline-none focus:border-emerald-600"
-                >
-                  {brands.map((b) => (
-                    <option key={b} value={b}>
-                      {b === 'All' ? 'All Brands' : b}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Availability */}
-              <div className="pt-3 border-t border-slate-100">
-                <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={onlyInStock}
-                    onChange={(e) => setOnlyInStock(e.target.checked)}
-                    className="rounded text-emerald-700 focus:ring-emerald-500"
-                  />
-                  <span>In Stock Only</span>
-                </label>
-              </div>
+              <label className="flex cursor-pointer items-center gap-2 border-t border-line pt-3 text-xs font-semibold text-ink">
+                <input
+                  type="checkbox"
+                  checked={onlyInStock}
+                  onChange={(event) => setOnlyInStock(event.target.checked)}
+                  className="accent-pine"
+                />
+                {t('shop.inStockOnly')}
+              </label>
             </div>
-          </div>
+          </aside>
 
-          {/* Right Product Grid Area */}
-          <div className="lg:col-span-3 space-y-6">
-            {/* Top Toolbar (Sort + View Switcher + Mobile Filter Trigger) */}
-            <div className="bg-white rounded-2xl p-3.5 border border-slate-200 shadow-2xs flex items-center justify-between gap-4">
+          <div className="space-y-6 lg:col-span-3">
+            <div className="card flex items-center justify-between gap-4 p-3.5">
               <button
                 onClick={() => setIsMobileFilterOpen(true)}
-                className="lg:hidden flex items-center gap-1.5 bg-slate-100 text-slate-800 text-xs font-bold px-3 py-2 rounded-xl border border-slate-200"
+                className="btn btn-outline !px-3 !py-2 text-xs lg:hidden"
               >
-                <Filter className="w-4 h-4 text-emerald-700" />
-                <span>Filters</span>
+                <Filter className="h-4 w-4 text-pine" />
+                {t('shop.filters')}
               </button>
 
               <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500 hidden sm:inline">Sort by:</span>
+                <span className="hidden text-ink-soft sm:inline">{t('shop.sort')}</span>
                 <select
                   value={sortBy}
-                  onChange={(e) => setSortBy(e.target.value as any)}
-                  className="bg-slate-50 border border-slate-200 text-slate-800 font-semibold text-xs rounded-xl px-3 py-2 outline-none"
+                  onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
+                  className="field !w-auto !py-2 font-semibold"
                 >
-                  <option value="popular">Popularity & Yield</option>
-                  <option value="price-asc">Price: Low to High</option>
-                  <option value="price-desc">Price: High to Low</option>
-                  <option value="rating">Highest Rated</option>
+                  <option value="popular">{t('shop.sortMostReviewed')}</option>
+                  <option value="price-asc">{t('shop.sortPriceLowHigh')}</option>
+                  <option value="price-desc">{t('shop.sortPriceHighLow')}</option>
+                  <option value="rating">{t('shop.sortHighestRated')}</option>
                 </select>
               </div>
 
-              {/* Grid / List Switcher */}
-              <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+              <div className="flex items-center gap-1 rounded-xl bg-cream p-1">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    viewMode === 'grid' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-400 hover:text-slate-700'
+                  className={`rounded-lg p-1.5 transition-colors ${
+                    viewMode === 'grid' ? 'bg-paper text-pine shadow-sm' : 'text-ink-soft hover:text-ink'
                   }`}
-                  title="Grid View"
+                  title={t('shop.gridView')}
                 >
-                  <Grid className="w-4 h-4" />
+                  <Grid className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    viewMode === 'list' ? 'bg-white text-emerald-800 shadow-2xs' : 'text-slate-400 hover:text-slate-700'
+                  className={`rounded-lg p-1.5 transition-colors ${
+                    viewMode === 'list' ? 'bg-paper text-pine shadow-sm' : 'text-ink-soft hover:text-ink'
                   }`}
-                  title="List View"
+                  title={t('shop.listView')}
                 >
-                  <List className="w-4 h-4" />
+                  <List className="h-4 w-4" />
                 </button>
               </div>
             </div>
 
-            {/* Empty State */}
             {filteredProducts.length === 0 ? (
-              <div className="bg-white rounded-2xl p-12 text-center border border-slate-200 shadow-xs max-w-lg mx-auto">
-                <div className="w-16 h-16 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4">
-                  <Search className="w-8 h-8" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-900">No Products Found</h3>
-                <p className="text-slate-500 text-xs mt-1.5 max-w-sm mx-auto">
-                  We couldn&apos;t find anything matching your search or the selected filters. Hardware
-                  is not shown when you filter by animal.
+              <div className="card mx-auto max-w-lg p-12 text-center">
+                <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-pine-soft text-pine">
+                  <Search className="h-7 w-7" />
+                </span>
+                <h2 className="mt-4 text-lg font-bold text-ink">{t('shop.emptyTitle')}</h2>
+                <p className="mx-auto mt-1.5 max-w-sm text-xs leading-relaxed text-ink-soft">
+                  {t('shop.emptyBody')}
                 </p>
-                <button
-                  onClick={resetFilters}
-                  className="mt-5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition-colors cursor-pointer"
-                >
-                  Reset All Filters
+                <button onClick={resetFilters} className="btn btn-primary mt-5">
+                  {t('shop.emptyCta')}
                 </button>
               </div>
             ) : viewMode === 'grid' ? (
-              /* GRID VIEW */
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
                 {filteredProducts.map((product) => (
                   <ProductCardGrid key={product.id} product={product} />
                 ))}
               </div>
             ) : (
-              /* LIST VIEW */
               <div className="space-y-4">
                 {filteredProducts.map((product) => (
                   <ProductCardList key={product.id} product={product} />
@@ -364,44 +283,46 @@ export const ProductListing: React.FC = () => {
         </div>
       </div>
 
-      {/* Mobile Filter Modal */}
       {isMobileFilterOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex justify-end">
-          <div className="bg-white w-full max-w-xs h-full p-6 space-y-6 overflow-y-auto">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <span className="font-bold text-slate-900 text-base">Filter Products</span>
-              <button onClick={() => setIsMobileFilterOpen(false)}>
-                <X className="w-5 h-5 text-slate-500" />
+        <div className="fixed inset-0 z-50 flex justify-end bg-ink/40 backdrop-blur-sm" onClick={() => setIsMobileFilterOpen(false)}>
+          <div
+            className="h-full w-full max-w-xs space-y-6 overflow-y-auto bg-paper p-6"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <span className="text-base font-bold text-ink">{t('shop.filters')}</span>
+              <button onClick={() => setIsMobileFilterOpen(false)} aria-label={t('common.close')}>
+                <X className="h-5 w-5 text-ink-soft" />
               </button>
             </div>
 
-            {/* Animal Type */}
+            <AnimalFilter value={selectedAnimal} onChange={setSelectedAnimal} />
+
             <div>
-              <label className="text-xs font-bold text-slate-800 uppercase block mb-2">Suitable Animal</label>
-              <div className="space-y-2 text-xs">
-{ANIMAL_FILTERS.map((animal) => (
-                    <label
-                      key={animal}
-                      className="flex items-center gap-2 text-slate-700 cursor-pointer"
-                    >
-                      <input
-                        type="radio"
-                        name="mAnimalType"
-                        checked={selectedAnimal === animal}
-                        onChange={() => setSelectedAnimal(animal)}
-                        className="text-emerald-700"
-                      />
-                    <span>{animal}</span>
-                  </label>
+              <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink">{t('shop.brand')}</p>
+              <select value={selectedBrand} onChange={(event) => setSelectedBrand(event.target.value)} className="field">
+                {brands.map((brand) => (
+                  <option key={brand} value={brand}>
+                    {brand === 'All' ? t('shop.allBrands') : brand}
+                  </option>
                 ))}
-              </div>
+              </select>
             </div>
 
-            <button
-              onClick={() => setIsMobileFilterOpen(false)}
-              className="w-full bg-emerald-800 text-white font-bold text-xs py-3 rounded-xl"
-            >
-              Apply Filters ({filteredProducts.length})
+            <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={onlyInStock}
+                onChange={(event) => setOnlyInStock(event.target.checked)}
+                className="accent-pine"
+              />
+              {t('shop.inStockOnly')}
+            </label>
+
+            <button onClick={() => setIsMobileFilterOpen(false)} className="btn btn-primary w-full">
+              {filteredProducts.length === 1
+                ? t('shop.showCountOne')
+                : t('shop.showCount', { count: filteredProducts.length })}
             </button>
           </div>
         </div>
@@ -410,76 +331,118 @@ export const ProductListing: React.FC = () => {
   );
 };
 
-/* Inner Subcomponent: Product Grid Card */
+const CategoryPill: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({
+  active,
+  onClick,
+  children,
+}) => (
+  <button
+    onClick={onClick}
+    className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold transition-colors ${
+      active ? 'bg-pine text-cream' : 'border border-line bg-paper text-ink-soft hover:border-pine/40 hover:text-ink'
+    }`}
+  >
+    {children}
+  </button>
+);
+
+const AnimalFilter: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const { t } = useLanguage();
+  const animalLabels: Record<string, string> = {
+    All: t('shop.animalAll'),
+    Cow: t('shop.animalCow'),
+    Buffalo: t('shop.animalBuffalo'),
+    Calf: t('shop.animalCalf'),
+    'Pregnant Heifer': t('shop.animalHeifer'),
+  };
+  return (
+    <div>
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-ink">{t('shop.suitableFor')}</p>
+      <p className="mb-2 text-[11px] leading-relaxed text-ink-soft">{t('shop.suitableForHelp')}</p>
+      <div className="space-y-1.5 text-xs">
+        {ANIMAL_FILTERS.map((animal) => (
+          <label key={animal} className="flex cursor-pointer items-center gap-2 text-ink-soft hover:text-ink">
+            <input
+              type="radio"
+              name="animalType"
+              checked={value === animal}
+              onChange={() => onChange(animal)}
+              className="accent-pine"
+            />
+            <span>{animalLabels[animal] ?? animal}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const ProductCardGrid: React.FC<{ product: Product }> = ({ product }) => {
   const { addToCart, wishlist, toggleWishlist, setSelectedProduct } = useApp();
+  const { t } = useLanguage();
   const [selectedWeight, setSelectedWeight] = useState<number>(product.selectedWeightKg || 50);
 
-  const currentOption = product.weightOptions.find((w) => w.weightKg === selectedWeight) || product.weightOptions[0];
+  const currentOption =
+    product.weightOptions.find((option) => option.weightKg === selectedWeight) || product.weightOptions[0];
   const priceToDisplay = currentOption ? currentOption.price : product.price;
+  const inStock = currentOption ? currentOption.stock > 0 : product.inStock;
   const isWishlisted = wishlist.includes(product.id);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-xl hover:border-emerald-500/40 transition-all flex flex-col justify-between group overflow-hidden">
-      {/* Image Container */}
-      <div className="relative h-48 bg-slate-100 overflow-hidden">
+    <article className="card group flex flex-col overflow-hidden transition-shadow hover:shadow-lg">
+      <div className="relative h-48 overflow-hidden bg-cream">
         <ProductImage
           src={product.image}
           alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
 
-        {/* Badges */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
-          {product.discountPercent > 0 && (
-            <span className="bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md">
-              {product.discountPercent}% OFF
-            </span>
-          )}
-        </div>
+        {product.discountPercent > 0 && (
+          <span className="absolute left-2.5 top-2.5 rounded-md bg-ochre px-2 py-0.5 text-[10px] font-black text-ink">
+            {t('shop.off', { n: product.discountPercent })}
+          </span>
+        )}
 
-        {/* Action icons */}
-        <div className="absolute top-2.5 right-2.5 flex flex-col gap-1">
+        <div className="absolute right-2.5 top-2.5 flex flex-col gap-1">
           <button
             onClick={() => toggleWishlist(product.id)}
-            className={`p-2 rounded-full shadow-md backdrop-blur-md transition-all cursor-pointer ${
-              isWishlisted ? 'bg-red-500 text-white' : 'bg-white/80 text-slate-700 hover:bg-white'
+            className={`rounded-full p-2 shadow-md backdrop-blur transition-colors ${
+              isWishlisted ? 'bg-clay text-paper' : 'bg-paper/85 text-ink-soft hover:bg-paper'
             }`}
+            aria-label={isWishlisted ? t('product.unsaveAria') : t('product.saveAria')}
           >
-            <Heart className="w-3.5 h-3.5 fill-current" />
+            <Heart className={`h-3.5 w-3.5 ${isWishlisted ? 'fill-current' : ''}`} />
           </button>
           <button
             onClick={() => setSelectedProduct(product)}
-            className="p-2 bg-white/80 hover:bg-white text-slate-700 rounded-full shadow-md backdrop-blur-md transition-all cursor-pointer"
-            title="Quick Details"
+            className="rounded-full bg-paper/85 p-2 text-ink-soft shadow-md backdrop-blur transition-colors hover:bg-paper"
+            title={t('product.closeAria')}
           >
-            <Eye className="w-3.5 h-3.5" />
+            <Eye className="h-3.5 w-3.5" />
           </button>
         </div>
 
-        {/* Animal tag, or descriptor tags for hardware with no animal */}
         {product.suitableFor.length > 0 ? (
-          <div className="absolute bottom-2.5 left-2.5 bg-slate-900/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
-            <ShieldCheck className="w-3 h-3 text-emerald-400" />
-            <span>{product.suitableFor.join(', ')}</span>
-          </div>
+          <span className="absolute bottom-2.5 left-2.5 flex items-center gap-1 rounded-full bg-ink/80 px-2 py-0.5 text-[10px] font-semibold text-cream backdrop-blur">
+            <ShieldCheck className="h-3 w-3 text-ochre" />
+            {product.suitableFor.join(', ')}
+          </span>
         ) : (
           product.tags.length > 0 && (
-            <div className="absolute bottom-2.5 left-2.5 right-2.5 bg-slate-900/80 backdrop-blur-md text-slate-200 text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1 truncate">
-              <Tag className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span className="absolute bottom-2.5 left-2.5 right-2.5 flex items-center gap-1 truncate rounded-full bg-ink/80 px-2 py-0.5 text-[10px] font-semibold text-cream backdrop-blur">
+              <Tag className="h-3 w-3 shrink-0 text-ochre" />
               <span className="truncate">{product.tags.slice(0, 2).join(' · ')}</span>
-            </div>
+            </span>
           )
         )}
       </div>
 
-      {/* Body */}
-      <div className="p-4 flex-1 flex flex-col justify-between">
+      <div className="flex flex-1 flex-col justify-between p-4">
         <div>
-          <div className="text-[11px] font-bold text-emerald-700 uppercase">{product.brand}</div>
+          <p className="text-[10px] font-bold uppercase tracking-wide text-pine">{product.brand}</p>
           <h3
             onClick={() => setSelectedProduct(product)}
-            className="text-sm font-bold text-slate-900 hover:text-emerald-700 transition-colors cursor-pointer mt-0.5 line-clamp-2"
+            className="mt-0.5 line-clamp-2 cursor-pointer text-sm font-bold text-ink transition-colors hover:text-pine"
           >
             {product.name}
           </h3>
@@ -488,83 +451,86 @@ const ProductCardGrid: React.FC<{ product: Product }> = ({ product }) => {
             <RatingStars rating={product.rating} count={product.reviewCount} />
           </div>
 
-          {/* Feature highlights */}
           <ul className="mt-2.5 space-y-1">
             {product.highlights.slice(0, 2).map((highlight) => (
-              <li key={highlight} className="flex items-start gap-1.5 text-[11px] text-slate-600 leading-snug">
-                <span className="mt-1 w-1 h-1 rounded-full bg-emerald-500 shrink-0" />
+              <li key={highlight} className="flex items-start gap-1.5 text-[11px] leading-snug text-ink-soft">
+                <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-ochre" />
                 <span className="line-clamp-1">{highlight}</span>
               </li>
             ))}
           </ul>
 
-          {/* Variant selector */}
-          <div className="mt-3 flex items-center gap-1.5 flex-wrap">
-            <span className="text-[11px] text-slate-400">Pack:</span>
-            {product.weightOptions.map((opt) => (
-              <button
-                key={opt.weightKg}
-                onClick={() => setSelectedWeight(opt.weightKg)}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition-colors cursor-pointer ${
-                  selectedWeight === opt.weightKg
-                    ? 'bg-emerald-800 text-white border-emerald-800'
-                    : 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200'
-                }`}
-              >
-                {formatVariantLabel(opt.weightKg, opt.unit)}
-              </button>
-            ))}
-          </div>
+          {product.weightOptions.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-ink-soft">{t('shop.packLabel')}</span>
+              {product.weightOptions.map((option) => (
+                <button
+                  key={option.weightKg}
+                  onClick={() => setSelectedWeight(option.weightKg)}
+                  className={`rounded-md border px-2 py-0.5 text-[11px] font-bold transition-colors ${
+                    selectedWeight === option.weightKg
+                      ? 'border-pine bg-pine text-cream'
+                      : 'border-line bg-cream text-ink-soft hover:bg-paper'
+                  }`}
+                >
+                  {formatVariantLabel(option.weightKg, option.unit)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Bottom Price & Add button */}
-        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+        <div className="mt-4 flex items-center justify-between border-t border-line pt-3">
           <div>
-            <div className="text-base font-black text-slate-900">₹{priceToDisplay.toLocaleString('en-IN')}</div>
-            <div className="text-[10px] text-slate-400">Excl. GST & Freight</div>
+            <p className="text-base font-bold text-ink">₹{priceToDisplay.toLocaleString('en-IN')}</p>
+            <p className="text-[10px] text-ink-soft">{t('shop.exclGst')}</p>
           </div>
 
           <button
             onClick={() => addToCart(product, selectedWeight, 1)}
-            className="flex items-center gap-1.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-3 py-2 rounded-xl transition-all cursor-pointer active:scale-95"
+            disabled={!inStock}
+            className="btn btn-primary !px-3 !py-2 text-xs disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <ShoppingBag className="w-3.5 h-3.5" />
-            <span>Add to Cart</span>
+            <ShoppingBag className="h-3.5 w-3.5" />
+            {inStock ? t('shop.addToCart') : t('shop.outOfStock')}
           </button>
         </div>
       </div>
-    </div>
+    </article>
   );
 };
 
-/* Inner Subcomponent: Product List Card */
 const ProductCardList: React.FC<{ product: Product }> = ({ product }) => {
   const { addToCart, wishlist, toggleWishlist, setSelectedProduct } = useApp();
+  const { t } = useLanguage();
   const [selectedWeight, setSelectedWeight] = useState<number>(product.selectedWeightKg || 50);
 
-  const currentOption = product.weightOptions.find((w) => w.weightKg === selectedWeight) || product.weightOptions[0];
+  const currentOption =
+    product.weightOptions.find((option) => option.weightKg === selectedWeight) || product.weightOptions[0];
   const priceToDisplay = currentOption ? currentOption.price : product.price;
+  const inStock = currentOption ? currentOption.stock > 0 : product.inStock;
+  const isWishlisted = wishlist.includes(product.id);
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs hover:shadow-lg transition-all flex flex-col sm:flex-row items-center justify-between gap-6">
-      <div className="flex items-center gap-4 w-full sm:w-auto">
+    <article className="card flex flex-col items-center justify-between gap-6 p-4 transition-shadow hover:shadow-lg sm:flex-row">
+      <div className="flex w-full items-center gap-4 sm:w-auto">
         <ProductImage
           src={product.image}
           alt={product.name}
-          className="w-24 h-24 sm:w-32 sm:h-32 object-cover rounded-xl shrink-0 border border-slate-100"
+          className="h-24 w-24 shrink-0 rounded-xl border border-line object-cover sm:h-32 sm:w-32"
         />
-        <div className="space-y-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold text-emerald-700 uppercase bg-emerald-50 px-2 py-0.5 rounded-md">
+        <div className="min-w-0 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-pine-soft px-2 py-0.5 text-[10px] font-bold uppercase text-pine">
               {product.brand}
             </span>
             {product.suitableFor.length > 0 ? (
-              <span className="text-[10px] font-bold text-slate-600 uppercase bg-slate-100 px-2 py-0.5 rounded-md">
+              <span className="rounded-md bg-cream px-2 py-0.5 text-[10px] font-bold uppercase text-ink-soft">
                 {product.suitableFor.join(', ')}
               </span>
             ) : (
               product.tags.slice(0, 2).map((tag) => (
-                <span key={tag} className="text-[10px] font-bold text-slate-600 uppercase bg-slate-100 px-2 py-0.5 rounded-md">
+                <span key={tag} className="rounded-md bg-cream px-2 py-0.5 text-[10px] font-bold uppercase text-ink-soft">
                   {tag}
                 </span>
               ))
@@ -572,33 +538,39 @@ const ProductCardList: React.FC<{ product: Product }> = ({ product }) => {
           </div>
           <h3
             onClick={() => setSelectedProduct(product)}
-            className="text-base font-bold text-slate-900 hover:text-emerald-700 transition-colors cursor-pointer"
+            className="cursor-pointer text-base font-bold text-ink transition-colors hover:text-pine"
           >
             {product.name}
           </h3>
-          <p className="text-slate-500 text-xs line-clamp-2 max-w-md">{product.description}</p>
-          <div className="pt-1">
-            <RatingStars rating={product.rating} count={product.reviewCount} />
-          </div>
+          <p className="line-clamp-2 max-w-md text-xs text-ink-soft">{product.description}</p>
+          <RatingStars rating={product.rating} count={product.reviewCount} />
         </div>
       </div>
 
-      <div className="flex items-center justify-between sm:justify-end gap-6 w-full sm:w-auto border-t sm:border-t-0 pt-3 sm:pt-0">
+      <div className="flex w-full items-center justify-between gap-6 border-t border-line pt-3 sm:w-auto sm:justify-end sm:border-t-0 sm:pt-0">
         <div className="text-right">
-          <div className="text-lg font-black text-slate-900">₹{priceToDisplay.toLocaleString('en-IN')}</div>
-          <div className="text-[10px] text-slate-400">
-            {formatCartVariantLabel(product, selectedWeight)} · {product.stockCount} in stock
-          </div>
+          <p className="text-lg font-bold text-ink">₹{priceToDisplay.toLocaleString('en-IN')}</p>
+          <p className="text-[10px] text-ink-soft">
+            {formatCartVariantLabel(product, selectedWeight)} ·{' '}
+            {inStock ? t('shop.inStockCount', { n: product.stockCount }) : t('shop.outOfStock')}
+          </p>
+          <button
+            onClick={() => toggleWishlist(product.id)}
+            className={`mt-1 text-[10px] font-bold ${isWishlisted ? 'text-clay' : 'text-ink-soft hover:text-ink'}`}
+          >
+            {isWishlisted ? t('shop.saved') : t('shop.saveItem')}
+          </button>
         </div>
 
         <button
           onClick={() => addToCart(product, selectedWeight, 1)}
-          className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 cursor-pointer"
+          disabled={!inStock}
+          className="btn btn-primary !px-4 !py-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Add to Cart</span>
+          <ShoppingBag className="h-4 w-4" />
+          {inStock ? 'Add to cart' : 'Out of stock'}
         </button>
       </div>
-    </div>
+    </article>
   );
 };

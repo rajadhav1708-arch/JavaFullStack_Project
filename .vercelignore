@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.vercel
+node_modules
+logs
+/cattle_frames_60fps
+/cows_frames_30fps_jpg
+/product images
+pashufeed.dump
+DOCKER_AUDIT.md
+khata_chunk.txt
+tsc2.txt
+tsc_err.txt
+tsc_out.txt
+PROGRESS.md

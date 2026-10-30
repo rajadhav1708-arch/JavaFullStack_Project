@@ -1,36 +1,42 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Product } from '../../types';
-import {
-  Store,
-  Search,
-  Printer,
-  X,
-  Scan,
-} from 'lucide-react';
+import { STORE } from '../../data/store';
+import { Product, CartItem, Order } from '../../types';
+import { printBill } from '../../utils/printBill';
+import { Store, Search, Printer, X } from 'lucide-react';
 
+/**
+ * Counter billing that writes real orders. Every completed sale goes through
+ * the same POST /api/orders endpoint as the online shop, so stock is decremented
+ * and the ledger stays consistent. There is no offline/local fallback: if the
+ * API is down the sale fails honestly.
+ */
 export const POSCounter: React.FC = () => {
-  const { products, khataRecords, addToast } = useApp();
+  const { products, setProducts, khataRecords, placeOrder, addToast } = useApp();
 
   const [search, setSearch] = useState('');
-  const [posCart, setPosCart] = useState<
-    { product: Product; weightKg: number; price: number; quantity: number }[]
-  >([]);
+  const [posCart, setPosCart] = useState<{ product: Product; weightKg: number; price: number; quantity: number }[]>([]);
   const [customerType, setCustomerType] = useState<'Walk-in' | 'Khata Farmer'>('Walk-in');
-  const [selectedKhataCustomer, setSelectedKhataCustomer] = useState(khataRecords[0]?.customerName || '');
+  // Only Approved accounts may take credit — the server enforces this too,
+  // but filtering here stops the cashier picking a pending or suspended one.
+  const approvedKhata = khataRecords.filter((record) => record.status === 'Approved');
+  const [selectedKhataId, setSelectedKhataId] = useState<string>(approvedKhata[0]?.id ?? '');
   const [paymentMode, setPaymentMode] = useState<'Cash' | 'UPI' | 'Khata Credit'>('Cash');
-  const [discountAmount, setDiscountAmount] = useState<number>(0);
-  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+  const [isPlacing, setIsPlacing] = useState(false);
+  const [receiptOrder, setReceiptOrder] = useState<Order | null>(null);
 
   const addToPosCart = (product: Product) => {
     setPosCart((prev) => {
-      const idx = prev.findIndex((i) => i.product.id === product.id);
-      if (idx > -1) {
-        const updated = [...prev];
-        updated[idx].quantity += 1;
-        return updated;
+      const existing = prev.find((item) => item.product.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+        );
       }
-      return [...prev, { product, weightKg: 50, price: product.price, quantity: 1 }];
+      return [
+        ...prev,
+        { product, weightKg: product.selectedWeightKg, price: product.price, quantity: 1 },
+      ];
     });
   };
 
@@ -38,194 +44,255 @@ export const POSCounter: React.FC = () => {
     setPosCart((prev) =>
       prev
         .map((item) => {
-          if (item.product.id === productId) {
-            const newQty = item.quantity + delta;
-            return newQty > 0 ? { ...item, quantity: newQty } : null;
-          }
-          return item;
+          if (item.product.id !== productId) return item;
+          const next = item.quantity + delta;
+          return next > 0 ? { ...item, quantity: next } : null;
         })
-        .filter(Boolean) as any
+        .filter((item): item is NonNullable<typeof item> => item !== null)
     );
   };
 
   const cartSubtotal = posCart.reduce((acc, item) => acc + item.price * item.quantity, 0);
-  const finalTotal = Math.max(0, cartSubtotal - discountAmount);
 
-  const handleCompleteSale = () => {
-    if (posCart.length === 0) {
-      addToast('POS Cart is empty!', 'warning');
+  const selectedKhata = approvedKhata.find((record) => record.id === selectedKhataId);
+  // The server's Khata check runs against the signed-in farmer's user id.
+  const selectedKhataUserId = selectedKhata?.customerId.startsWith('user-')
+    ? Number(selectedKhata.customerId.replace('user-', ''))
+    : undefined;
+
+  const refreshStock = async () => {
+    try {
+      const res = await fetch('/api/products');
+      if (res.ok) {
+        const data = (await res.json()) as { products: Product[] };
+        setProducts(data.products);
+      }
+    } catch {
+      /* stock refresh is best-effort; the next page load will sync anyway */
+    }
+  };
+
+  const handleCompleteSale = async () => {
+    if (posCart.length === 0 || isPlacing) {
+      if (posCart.length === 0) addToast('Add at least one product to the bill.', 'warning');
       return;
     }
-    setIsReceiptModalOpen(true);
+
+    const customCart: CartItem[] = posCart.map((item) => ({
+      product: item.product,
+      weightKg: item.weightKg,
+      price: item.price,
+      quantity: item.quantity,
+    }));
+
+    const shippingAddress =
+      customerType === 'Khata Farmer' && selectedKhata
+        ? {
+            fullName: selectedKhata.customerName,
+            phone: STORE.phone,
+            villageTown: selectedKhata.village,
+            talukaDistrict: STORE.region,
+            state: 'Maharashtra',
+            pincode: '',
+            landmark: 'Counter sale (pickup at shop)',
+          }
+        : {
+            fullName: 'Counter walk-in customer',
+            phone: STORE.phone,
+            villageTown: STORE.region,
+            talukaDistrict: STORE.region,
+            state: 'Maharashtra',
+            pincode: '',
+            landmark: 'Counter sale (pickup at shop)',
+          };
+
+    setIsPlacing(true);
+    try {
+      // A Khata counter sale must land on the FARMER's ledger, not the cashier's
+      // account, so the signed-in customer's id travels with the order. The
+      // server only honours it for staff sessions.
+      const order = await placeOrder(
+        shippingAddress,
+        paymentMode === 'Khata Credit' ? 'Khata Credit' : 'Cash on Delivery',
+        'Store Pickup',
+        customCart,
+        paymentMode === 'Khata Credit' && customerType === 'Khata Farmer' ? selectedKhataUserId : undefined
+      );
+
+      // Cash and UPI are taken at the counter right now, so mark them paid
+      // immediately. Khata credit stays pending until the ledger is settled.
+      if (paymentMode !== 'Khata Credit') {
+        await fetch(`/api/orders/${order.id.replace('ord-', '')}/payment`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentStatus: 'Paid' }),
+        }).catch(() => {
+          addToast('Order placed, but marking it paid failed. Confirm it from Dispatch.', 'warning');
+        });
+      }
+
+      setReceiptOrder(order);
+      setPosCart([]);
+      void refreshStock();
+    } catch (error) {
+      addToast(
+        error instanceof Error ? error.message : 'Could not complete the counter sale.',
+        'error'
+      );
+    } finally {
+      setIsPlacing(false);
+    }
   };
 
-  const handlePrintAndClose = () => {
-    window.print();
-    setIsReceiptModalOpen(false);
-    setPosCart([]);
-    setDiscountAmount(0);
-    addToast('POS Invoice Printed & Order Logged!', 'success');
-  };
-
-  const filteredProducts = products.filter((p) => {
+  const filteredProducts = products.filter((product) => {
     if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q) || p.brand.toLowerCase().includes(q);
+    const query = search.toLowerCase();
+    return (
+      product.name.toLowerCase().includes(query) ||
+      product.sku.toLowerCase().includes(query) ||
+      product.brand.toLowerCase().includes(query)
+    );
   });
 
   return (
     <div className="space-y-6">
-      {/* POS Bar Header */}
-      <div className="bg-slate-900 text-white p-5 rounded-3xl flex items-center justify-between shadow-lg">
+      <div className="card flex items-center justify-between p-5">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-400 text-slate-950 font-black flex items-center justify-center text-lg">
-            <Store className="w-5 h-5" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-pine text-cream">
+            <Store className="h-5 w-5" />
           </div>
           <div>
-            <h1 className="text-lg font-bold">Express Counter POS Billing</h1>
-            <p className="text-xs text-slate-400">PashuFeed Central Counter Terminal #1</p>
+            <h1 className="text-lg text-ink">Counter billing</h1>
+            <p className="text-xs text-ink-soft">{STORE.name} · counter terminal</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <div className="bg-emerald-900 text-emerald-200 text-xs font-bold px-3 py-1.5 rounded-xl border border-emerald-700">
-            Counter Status: ONLINE
-          </div>
-        </div>
+        <span className="rounded-xl border border-pine/20 bg-pine-soft px-3 py-1.5 text-xs font-bold text-pine">
+          Connected to live catalogue
+        </span>
       </div>
 
-      {/* Main Split Layout: Left Catalog + Right Cart */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* LEFT CATALOG (7 Cols) */}
-        <div className="lg:col-span-7 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <div className="space-y-4 lg:col-span-7">
           <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
             <input
               type="text"
-              placeholder="Scan Barcode or Search Feed Name / SKU..."
+              placeholder="Search product, SKU or brand…"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-slate-100 border border-slate-200 text-slate-900 font-semibold text-xs rounded-2xl pl-10 pr-10 py-3 outline-none focus:border-emerald-700"
+              onChange={(event) => setSearch(event.target.value)}
+              className="field !pl-9"
             />
-            <Scan className="w-4 h-4 text-emerald-700 absolute left-3.5 top-3.5" />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-3 text-slate-400 hover:text-slate-800"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-[500px] overflow-y-auto p-1">
-            {filteredProducts.map((p) => (
-              <div
-                key={p.id}
-                onClick={() => addToPosCart(p)}
-                className="p-3 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-600 rounded-2xl cursor-pointer transition-all flex flex-col justify-between space-y-2 group"
+          <div className="grid max-h-[500px] grid-cols-2 gap-3 overflow-y-auto p-1 sm:grid-cols-3">
+            {filteredProducts.map((product) => (
+              <button
+                key={product.id}
+                onClick={() => addToPosCart(product)}
+                disabled={product.stockCount <= 0}
+                className="flex flex-col justify-between space-y-2 rounded-2xl border border-line bg-cream/50 p-3 text-left transition-colors hover:border-pine/40 hover:bg-paper disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <div>
-                  <span className="text-[9px] font-bold text-emerald-800 uppercase bg-emerald-100 px-1.5 py-0.5 rounded">
-                    {p.brand}
+                  <span className="rounded bg-pine-soft px-1.5 py-0.5 text-[9px] font-bold uppercase text-pine">
+                    {product.brand}
                   </span>
-                  <div className="font-bold text-slate-900 text-xs mt-1 group-hover:text-emerald-800 line-clamp-2">
-                    {p.name}
-                  </div>
+                  <div className="mt-1 line-clamp-2 text-xs font-bold text-ink">{product.name}</div>
                 </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-xs">
-                  <span className="font-black text-slate-900">₹{p.price}</span>
-                  <span className="text-[10px] text-slate-400">{p.stockCount} in stock</span>
+                <div className="flex items-center justify-between border-t border-line pt-2 text-xs">
+                  <span className="font-bold text-ink">₹{product.price.toLocaleString('en-IN')}</span>
+                  <span className="text-[10px] text-ink-soft">{product.stockCount} in stock</span>
                 </div>
-              </div>
+              </button>
             ))}
           </div>
         </div>
 
-        {/* RIGHT BILLING CART (5 Cols) */}
-        <div className="lg:col-span-5 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs space-y-5 flex flex-col justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <span className="font-bold text-slate-900 text-sm">Active Counter Bill</span>
-              <span className="text-xs text-slate-500">{posCart.length} Feed Line Items</span>
+        <div className="flex flex-col justify-between space-y-5 lg:col-span-5">
+          <div className="card space-y-4 p-5">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <span className="text-sm font-bold text-ink">Current bill</span>
+              <span className="text-xs text-ink-soft">
+                {posCart.length} line{posCart.length === 1 ? '' : 's'}
+              </span>
             </div>
 
-            {/* Customer Type Picker */}
             <div className="space-y-2 text-xs">
-              <label className="font-bold text-slate-700 block">Select Customer Account:</label>
+              <span className="block font-bold text-ink">Customer</span>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setCustomerType('Walk-in')}
-                  className={`p-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                  className={`rounded-xl border p-2 font-bold transition-colors ${
                     customerType === 'Walk-in'
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                      ? 'border-pine bg-pine text-cream'
+                      : 'border-line bg-cream text-ink-soft hover:border-pine/40'
                   }`}
                 >
-                  Walk-in Farmer
+                  Walk-in
                 </button>
                 <button
                   onClick={() => setCustomerType('Khata Farmer')}
-                  className={`p-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                  disabled={approvedKhata.length === 0}
+                  className={`rounded-xl border p-2 font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                     customerType === 'Khata Farmer'
-                      ? 'bg-emerald-800 text-white border-emerald-800'
-                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                      ? 'border-pine bg-pine text-cream'
+                      : 'border-line bg-cream text-ink-soft hover:border-pine/40'
                   }`}
                 >
-                  Khata Account
+                  Khata account
                 </button>
               </div>
 
               {customerType === 'Khata Farmer' && (
                 <select
-                  value={selectedKhataCustomer}
-                  onChange={(e) => setSelectedKhataCustomer(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 font-bold text-slate-800 text-xs rounded-xl p-2.5 outline-none"
+                  value={selectedKhataId}
+                  onChange={(event) => setSelectedKhataId(event.target.value)}
+                  className="field font-bold"
                 >
-                  {khataRecords.map((k) => (
-                    <option key={k.id} value={k.customerName}>
-                      {k.customerName} ({k.village})
+                  {approvedKhata.map((record) => (
+                    <option key={record.id} value={record.id}>
+                      {record.customerName} ({record.village}) — ₹{record.availableCredit.toLocaleString('en-IN')} available
                     </option>
                   ))}
                 </select>
               )}
             </div>
 
-            {/* Cart Items List */}
-            <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+            <div className="max-h-52 space-y-2 overflow-y-auto pr-1">
               {posCart.length === 0 ? (
-                <div className="text-center py-8 text-xs text-slate-400">
-                  Click on any feed on the left catalog to add to bill.
-                </div>
+                <p className="py-8 text-center text-xs text-ink-soft">
+                  Pick products from the catalogue to start a bill.
+                </p>
               ) : (
                 posCart.map((item) => (
                   <div
                     key={item.product.id}
-                    className="p-2.5 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs"
+                    className="flex items-center justify-between rounded-xl border border-line bg-cream/50 p-2.5 text-xs"
                   >
-                    <div>
-                      <div className="font-bold text-slate-900">{item.product.name}</div>
-                      <div className="text-[10px] text-slate-500">₹{item.price} x {item.quantity}</div>
+                    <div className="min-w-0">
+                      <div className="truncate font-bold text-ink">{item.product.name}</div>
+                      <div className="text-[10px] text-ink-soft">
+                        ₹{item.price.toLocaleString('en-IN')} × {item.quantity}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <div className="flex items-center border border-slate-300 rounded-lg bg-white overflow-hidden">
+                      <div className="flex items-center overflow-hidden rounded-lg border border-line bg-paper">
                         <button
                           onClick={() => updatePosQty(item.product.id, -1)}
-                          className="px-2 py-0.5 text-slate-700 hover:bg-slate-100 font-bold"
+                          className="px-2 py-0.5 text-ink-soft hover:bg-cream hover:text-ink"
                         >
-                          -
+                          −
                         </button>
-                        <span className="px-2 font-bold text-slate-900">{item.quantity}</span>
+                        <span className="px-2 font-bold text-ink">{item.quantity}</span>
                         <button
                           onClick={() => updatePosQty(item.product.id, 1)}
-                          className="px-2 py-0.5 text-slate-700 hover:bg-slate-100 font-bold"
+                          className="px-2 py-0.5 text-ink-soft hover:bg-cream hover:text-ink"
                         >
                           +
                         </button>
                       </div>
-                      <span className="font-black text-slate-900 w-14 text-right">
-                        ₹{item.price * item.quantity}
+                      <span className="w-16 text-right font-bold text-ink">
+                        ₹{(item.price * item.quantity).toLocaleString('en-IN')}
                       </span>
                     </div>
                   </div>
@@ -234,17 +301,16 @@ export const POSCounter: React.FC = () => {
             </div>
           </div>
 
-          {/* Payment Mode & Bill Total */}
-          <div className="pt-3 border-t border-slate-200 space-y-3">
+          <div className="card space-y-3 p-5">
             <div className="grid grid-cols-3 gap-2 text-xs">
               {(['Cash', 'UPI', 'Khata Credit'] as const).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setPaymentMode(mode)}
-                  className={`p-2 rounded-xl font-bold border transition-all cursor-pointer ${
+                  className={`rounded-xl border p-2 font-bold transition-colors ${
                     paymentMode === mode
-                      ? 'bg-emerald-800 text-white border-emerald-800'
-                      : 'bg-slate-50 text-slate-700 border-slate-200'
+                      ? 'border-pine bg-pine text-cream'
+                      : 'border-line bg-cream text-ink-soft hover:border-pine/40'
                   }`}
                 >
                   {mode}
@@ -253,84 +319,87 @@ export const POSCounter: React.FC = () => {
             </div>
 
             <div className="space-y-1 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span>Subtotal:</span>
-                <span className="font-bold text-slate-900">₹{cartSubtotal.toLocaleString('en-IN')}</span>
+              <div className="flex justify-between text-ink-soft">
+                <span>Subtotal</span>
+                <span className="font-bold text-ink">₹{cartSubtotal.toLocaleString('en-IN')}</span>
               </div>
-              <div className="flex justify-between items-center text-slate-600">
-                <span>Spot Discount (₹):</span>
-                <input
-                  type="number"
-                  value={discountAmount}
-                  onChange={(e) => setDiscountAmount(Number(e.target.value))}
-                  className="w-20 bg-slate-50 border border-slate-200 text-right font-bold text-xs rounded-lg p-1"
-                />
-              </div>
-              <div className="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-slate-100">
-                <span>Net Payable Amount:</span>
-                <span className="text-emerald-800">₹{finalTotal.toLocaleString('en-IN')}</span>
+              <p className="text-[10px] text-ink-soft">
+                GST and any bulk discount are applied by the server when the sale is recorded.
+              </p>
+              <div className="flex items-center justify-between border-t border-line pt-2 text-sm font-bold text-ink">
+                <span>Items total</span>
+                <span className="font-display text-lg">₹{cartSubtotal.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
             <button
-              onClick={handleCompleteSale}
-              className="w-full bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-sm py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg cursor-pointer"
+              onClick={() => void handleCompleteSale()}
+              disabled={isPlacing}
+              className="btn btn-primary w-full disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Printer className="w-4 h-4" />
-              <span>Complete Sale & Print Thermal Bill</span>
+              <Printer className="h-4 w-4" />
+              {isPlacing ? 'Recording sale…' : 'Complete sale and print bill'}
             </button>
           </div>
         </div>
       </div>
 
-      {/* RECEIPT PRINT MODAL */}
-      {isReceiptModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-sm w-full p-6 space-y-4 shadow-2xl relative font-mono text-xs">
+      {receiptOrder && (
+        <div className="print-backdrop fixed inset-0 z-50 flex items-center justify-center bg-ink/50 p-4 backdrop-blur-sm">
+          <div className="print-area relative w-full max-w-sm space-y-4 rounded-3xl bg-paper p-6 font-mono text-xs shadow-2xl">
             <button
-              onClick={() => setIsReceiptModalOpen(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-800 font-sans"
+              onClick={() => setReceiptOrder(null)}
+              className="no-print absolute right-4 top-4 text-ink-soft hover:text-ink"
+              aria-label="Close receipt"
             >
-              <X className="w-5 h-5" />
+              <X className="h-5 w-5" />
             </button>
 
-            <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-300">
-              <div className="font-black text-base tracking-widest uppercase text-slate-900">PASHUFEED PRO</div>
-              <div>Cattle Feed Central Store, MIDC Kagal</div>
-              <div>GSTIN: 27AABCP1234F1Z0 | Ph: 1800-425-3333</div>
-              <div className="text-[10px] text-slate-400 mt-1">Invoice #{`POS-${Math.floor(1000 + Math.random() * 9000)}`}</div>
+            <div className="space-y-1 border-b border-dashed border-line pb-3 text-center">
+              <div className="text-base font-black uppercase tracking-widest text-ink">{STORE.name}</div>
+              <div>{STORE.region}</div>
+              <div>{STORE.phone}</div>
+              <div className="mt-1 text-[10px] text-ink-soft">Order #{receiptOrder.orderNumber}</div>
             </div>
 
             <div className="space-y-1">
-              <div>Customer: {customerType === 'Walk-in' ? 'Walk-in Farmer' : selectedKhataCustomer}</div>
-              <div>Payment Mode: {paymentMode}</div>
+              <div>Customer: {receiptOrder.customerName}</div>
+              <div>Payment: {receiptOrder.paymentMethod} ({receiptOrder.paymentStatus})</div>
             </div>
 
-            <div className="border-t border-b border-dashed border-slate-300 py-2 space-y-1">
-              {posCart.map((item, idx) => (
-                <div key={idx} className="flex justify-between">
-                  <span className="truncate max-w-[180px]">{item.product.name}</span>
-                  <span>{item.quantity} x ₹{item.price} = ₹{item.price * item.quantity}</span>
+            <div className="space-y-1 border-y border-dashed border-line py-2">
+              {receiptOrder.items.map((item, index) => (
+                <div key={`${item.productId}-${index}`} className="flex justify-between">
+                  <span className="max-w-[180px] truncate">{item.productName}</span>
+                  <span>
+                    {item.quantity} × ₹{item.unitPrice} = ₹{item.totalPrice.toLocaleString('en-IN')}
+                  </span>
                 </div>
               ))}
             </div>
 
             <div className="space-y-1 text-right font-bold text-sm">
-              <div>Subtotal: ₹{cartSubtotal}</div>
-              {discountAmount > 0 && <div>Discount: -₹{discountAmount}</div>}
-              <div className="text-emerald-800">TOTAL: ₹{finalTotal}</div>
+              <div>Subtotal: ₹{receiptOrder.subtotal.toLocaleString('en-IN')}</div>
+              {receiptOrder.discount > 0 && (
+                <div>Bulk discount: −₹{receiptOrder.discount.toLocaleString('en-IN')}</div>
+              )}
+              <div>GST: ₹{receiptOrder.tax.toLocaleString('en-IN')}</div>
+              <div className="text-pine">TOTAL: ₹{receiptOrder.totalAmount.toLocaleString('en-IN')}</div>
             </div>
 
-            <div className="text-center text-[10px] text-slate-400 pt-2 border-t border-dashed border-slate-300">
-              Thank you for trusting PashuFeed Pro Feeds!
+            <div className="border-t border-dashed border-line pt-2 text-center text-[10px] text-ink-soft">
+              {STORE.gstNote}
             </div>
 
             <button
-              onClick={handlePrintAndClose}
-              className="w-full bg-emerald-800 text-white font-bold font-sans py-3 rounded-2xl flex items-center justify-center gap-2 cursor-pointer"
+              onClick={() => {
+                printBill();
+                setReceiptOrder(null);
+              }}
+              className="btn btn-primary w-full font-sans"
             >
-              <Printer className="w-4 h-4" />
-              <span>Print Invoice</span>
+              <Printer className="h-4 w-4" />
+              Print invoice
             </button>
           </div>
         </div>

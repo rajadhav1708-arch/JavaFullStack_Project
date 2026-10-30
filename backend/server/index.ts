@@ -1,4 +1,5 @@
 import express from 'express';
+import helmet from 'helmet';
 import { GoogleGenAI } from '@google/genai';
 import './env';
 import { checkDb, isDbConfigured, pool } from './db';
@@ -161,7 +162,19 @@ function toGeminiHistory(history: ChatMessage[] | undefined) {
     }));
 }
 
-const app = express();
+export const app = express();
+// Behind a reverse proxy (nginx, Render, Fly) the rate limiter needs the real
+// client address, and reset links need the external protocol.
+app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.use(
+  helmet({
+    // The SPA is served by Vite in development and a static host in production;
+    // a strict CSP here would only govern API responses and break nothing.
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 app.use(express.json({ limit: '256kb' }));
 
 app.get('/api/health', (_req, res) => {
@@ -311,17 +324,22 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`PashuFeed API listening on http://localhost:${PORT}`);
-  if (!API_KEY) {
-    console.warn('GEMINI_API_KEY missing - /api/chat will return 503 and the chat uses demo mode.');
-  }
-  if (!isDbConfigured) {
-    console.warn(
-      'DATABASE_URL missing - accounts are disabled and /api/auth returns 503. ' +
-        'The storefront, AI quiz and chatbot still work. See README for setup.'
-    );
-  } else if (!process.env.SESSION_SECRET) {
-    console.warn('SESSION_SECRET missing - set it in .env or login will fail.');
-  }
-});
+// On Vercel the Express app is served as a serverless function via ./api,
+// which imports { app } from this module. Starting a listener there would
+// keep the lambda connection from settling, so only listen in normal runtimes.
+if (!process.env.VERCEL || process.env.VERCEL_ENV === 'development') {
+  app.listen(PORT, () => {
+    console.log(`Hindavi Traders API listening on http://localhost:${PORT}`);
+    if (!API_KEY) {
+      console.warn('GEMINI_API_KEY missing - /api/chat will return 503 and the chat uses demo mode.');
+    }
+    if (!isDbConfigured) {
+      console.warn(
+        'DATABASE_URL missing - accounts are disabled and /api/auth returns 503. ' +
+          'The storefront, AI quiz and chatbot still work. See README for setup.'
+      );
+    } else if (!process.env.SESSION_SECRET) {
+      console.warn('SESSION_SECRET missing - set it in .env or login will fail.');
+    }
+  });
+}

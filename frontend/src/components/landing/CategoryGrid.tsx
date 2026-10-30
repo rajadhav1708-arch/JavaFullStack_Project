@@ -1,95 +1,85 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { ProductCategory } from '../../types';
-import { useInView, useScrollProgress, parallaxOffset } from '../../hooks/useScrollProgress';
-import { ArrowRight, Sparkles } from 'lucide-react';
-
-const HEADING_TRAVEL = 16;
+import { ArrowRight, Layers } from 'lucide-react';
 
 export const CategoryGrid: React.FC = () => {
   const { setCurrentView, setSelectedCategory, categories, isCatalogueLoading } = useApp();
-  const section = useInView<HTMLElement>();
-  const { ref: headingRef, progress } = useScrollProgress<HTMLDivElement>(section.inView);
 
   const handleCategoryClick = (categoryName: ProductCategory) => {
     setSelectedCategory(categoryName);
     setCurrentView('shop');
   };
 
-  const headingOffset = parallaxOffset(progress, HEADING_TRAVEL);
-
   return (
-    <section ref={section.ref} className="py-16 bg-transparent text-white border-b border-white/10 relative z-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div
-            ref={headingRef}
-            data-reveal
-            className="text-center max-w-3xl mx-auto mb-12 will-change-transform"
-            style={{ transform: `translate3d(0, ${headingOffset}px, 0)` }}
-          >
-          <div className="inline-flex items-center gap-1.5 bg-[#065f46] text-[#34d399] text-xs font-bold px-3 py-1 rounded-full mb-3 border border-emerald-500/30">
-            <Sparkles className="w-3.5 h-3.5 text-[#34d399]" />
-            <span>Shop by Category</span>
+    <section className="border-b border-line py-16 sm:py-20">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div data-reveal className="max-w-xl">
+            <p className="eyebrow">
+              <Layers className="h-3.5 w-3.5" />
+              Shop by category
+            </p>
+            <h2 className="mt-3 text-3xl text-ink sm:text-4xl">Feed, minerals, dairy gear &amp; field supplies</h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-soft">
+              From daily compound feed to the hardware a working farm actually runs on.
+            </p>
           </div>
-          <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
-            Feeds, Dairy Gear & Farm Supplies
-          </h2>
-          <p className="text-slate-300 text-sm sm:text-base mt-2">
-            From precision cattle nutrition to the hardware, machinery and field gear a working
-            farm actually runs on.
-          </p>
+
+          <button
+            onClick={() => {
+              setSelectedCategory('All');
+              setCurrentView('shop');
+            }}
+            className="group inline-flex items-center gap-2 self-start text-xs font-bold text-pine sm:self-auto"
+          >
+            View full catalogue
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+          </button>
         </div>
 
-        {/* Tiles are not parallaxed: a translated grid child drops out of row
-            alignment and the columns stop matching height. */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Categories load from the API; show placeholders rather than a
-              collapsed grid that pops in a moment later. */}
+        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {isCatalogueLoading &&
-            Array.from({ length: 12 }).map((_, index) => (
-              <div
-                key={`skeleton-${index}`}
-                className="h-64 rounded-2xl bg-white/5 border border-white/10 animate-pulse"
-              />
+            Array.from({ length: 8 }).map((_, index) => (
+              <div key={`skeleton-${index}`} className="h-72 animate-pulse rounded-2xl border border-line bg-paper" />
             ))}
+
           {categories.map((cat, index) => (
-            <div
+            <article
               key={cat.id}
               data-reveal
-              data-reveal-delay={String((index % 4) * 90)}
+              data-reveal-delay={String((index % 4) * 70)}
               onClick={() => handleCategoryClick(cat.id)}
-              className="group bg-slate-900/40 backdrop-blur-md rounded-2xl overflow-hidden border border-slate-700/60 shadow-lg hover:shadow-2xl hover:border-[#10b981] transition-all cursor-pointer flex flex-col justify-between"
+              className="card group flex cursor-pointer flex-col overflow-hidden transition-all hover:-translate-y-1 hover:border-pine/40 hover:shadow-xl hover:shadow-ink/10"
             >
-              <div className="relative h-48 overflow-hidden bg-slate-800">
+              <div className="relative aspect-[4/3] overflow-hidden bg-cream">
                 <img
                   src={cat.image}
                   alt={cat.name}
                   referrerPolicy="no-referrer"
                   loading="lazy"
                   decoding="async"
-                  className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                  className="h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 />
-                <div className="absolute top-3 right-3 bg-slate-950/80 backdrop-blur-md text-white text-[11px] font-bold px-2.5 py-1 rounded-full border border-white/10 shadow-sm">
-                  {cat.productCount} Products
-                </div>
+                <span className="absolute right-3 top-3 rounded-full bg-paper/95 px-2.5 py-1 text-[10px] font-bold text-pine shadow-sm">
+                  {cat.productCount} {cat.productCount === 1 ? 'product' : 'products'}
+                </span>
               </div>
 
-              <div className="p-5 flex-1 flex flex-col justify-between">
+              <div className="flex flex-1 flex-col justify-between p-5">
                 <div>
-                  <h3 className="text-base font-bold text-white group-hover:text-[#34d399] transition-colors">
+                  <h3 className="text-base font-semibold text-ink transition-colors group-hover:text-pine">
                     {cat.name}
                   </h3>
-                  <p className="text-slate-300 text-xs leading-relaxed mt-1.5 line-clamp-2">
-                    {cat.description}
-                  </p>
+                  <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-soft">{cat.description}</p>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-slate-800 flex items-center justify-between text-xs font-bold text-[#34d399] group-hover:text-emerald-300">
-                  <span>Browse Products</span>
-                  <ArrowRight className="w-4 h-4 transform group-hover:translate-x-1 transition-transform" />
+                <div className="mt-4 flex items-center justify-between border-t border-line pt-3 text-xs font-bold text-pine">
+                  <span>Browse products</span>
+                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                 </div>
               </div>
-            </div>
+            </article>
           ))}
         </div>
       </div>

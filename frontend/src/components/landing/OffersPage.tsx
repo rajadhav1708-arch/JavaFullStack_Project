@@ -1,87 +1,90 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { useLanguage } from '../../context/LanguageContext';
-import { ShoppingBag, Tag } from 'lucide-react';
+import { ProductImage } from '../common/ProductImage';
+import { Tag, ShoppingBag } from 'lucide-react';
 
 /**
- * Customer-facing offers view, wired to the "Offers" nav item (which used to
- * render a blank page). Every card is a real catalogue row that currently
- * carries a discount, so the page can never advertise an offer that is not
- * actually in the database.
+ * Customer-facing offers view, wired to the "Offers" nav item. Every card is a
+ * real catalogue row that currently carries a discount, so the page can never
+ * advertise an offer that is not actually in the database.
  */
 export const OffersPage: React.FC = () => {
   const { products, addToCart, setSelectedProduct, isCatalogueLoading } = useApp();
   const { t } = useLanguage();
 
   const discounted = products
-    .filter((p) => p.discountPercent > 0)
+    .filter((product) => product.discountPercent > 0)
     .sort((a, b) => b.discountPercent - a.discountPercent);
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 text-white">
+    <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
       <div className="mb-8">
-        <div className="inline-flex items-center gap-1.5 bg-[#065f46] text-[#34d399] text-xs font-bold px-3 py-1 rounded-full border border-emerald-500/30 mb-3">
-          <Tag className="w-3.5 h-3.5" />
-          <span>{t('nav.offers')}</span>
-        </div>
-        <h1 className="text-2xl sm:text-4xl font-black tracking-tight">{t('offers.title')}</h1>
-        <p className="text-slate-300 text-sm mt-2">{t('offers.subtitle')}</p>
+        <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-pine/20 bg-pine-soft px-3 py-1 text-xs font-bold text-pine">
+          <Tag className="h-3.5 w-3.5" />
+          {t('nav.offers')}
+        </span>
+        <h1 className="text-2xl text-ink sm:text-4xl">{t('offers.title')}</h1>
+        <p className="mt-2 text-sm text-ink-soft">{t('offers.subtitle')}</p>
       </div>
 
       {isCatalogueLoading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-72 rounded-2xl bg-slate-900/40 border border-slate-700/60 animate-pulse" />
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-72 animate-pulse rounded-2xl bg-cream" />
           ))}
         </div>
       )}
 
       {!isCatalogueLoading && discounted.length === 0 && (
-        <p className="text-slate-400 text-sm">No active discounts right now. Check back soon.</p>
+        <p className="text-sm text-ink-soft">
+          No active discounts right now. Check the catalogue for regular prices.
+        </p>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {discounted.map((product) => (
-          <div
+          <article
             key={product.id}
-            className="bg-slate-900/40 backdrop-blur-md rounded-2xl border border-slate-700/60 overflow-hidden flex flex-col justify-between group hover:border-[#10b981] transition-all"
+            className="card group flex flex-col justify-between overflow-hidden transition-shadow hover:shadow-lg"
           >
-            <div className="relative h-44 bg-slate-800 overflow-hidden">
-              <img
+            <div className="relative h-44 overflow-hidden bg-cream">
+              <ProductImage
                 src={product.image}
                 alt={product.name}
-                referrerPolicy="no-referrer"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
               />
-              <span className="absolute top-3 left-3 bg-amber-500 text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-md">
-                {product.discountPercent}% OFF
+              <span className="absolute left-3 top-3 rounded-md bg-ochre px-2 py-0.5 text-[10px] font-black text-ink">
+                {product.discountPercent}% off
               </span>
             </div>
-            <div className="p-4 flex-1 flex flex-col justify-between">
+            <div className="flex flex-1 flex-col justify-between p-4">
               <div>
-                <div className="text-[11px] font-bold text-[#34d399] uppercase">{product.brand}</div>
+                <p className="text-[11px] font-bold uppercase text-pine">{product.brand}</p>
                 <h3
                   onClick={() => setSelectedProduct(product)}
-                  className="text-sm font-bold mt-1 line-clamp-2 cursor-pointer hover:text-[#34d399]"
+                  className="mt-1 line-clamp-2 cursor-pointer text-sm font-bold text-ink hover:text-pine"
                 >
                   {product.name}
                 </h3>
               </div>
-              <div className="mt-3 pt-3 border-t border-slate-800 flex items-center justify-between">
+              <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
                 <div>
-                  <div className="text-lg font-black">₹{product.price.toLocaleString('en-IN')}</div>
-                  <div className="text-xs text-slate-400 line-through">₹{product.originalPrice.toLocaleString('en-IN')}</div>
+                  <p className="text-lg font-bold text-ink">₹{product.price.toLocaleString('en-IN')}</p>
+                  <p className="text-xs text-ink-soft line-through">
+                    ₹{product.originalPrice.toLocaleString('en-IN')}
+                  </p>
                 </div>
                 <button
                   onClick={() => addToCart(product, product.selectedWeightKg || 50, 1)}
-                  className="flex items-center gap-1.5 bg-[#10b981] hover:bg-[#059669] text-white font-bold text-xs px-3.5 py-2 rounded-xl cursor-pointer"
+                  className="btn btn-primary !px-3.5 !py-2 text-xs"
                 >
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>{t('cart.add')}</span>
+                  <ShoppingBag className="h-3.5 w-3.5" />
+                  {t('offers.add')}
                 </button>
               </div>
             </div>
-          </div>
+          </article>
         ))}
       </div>
     </div>

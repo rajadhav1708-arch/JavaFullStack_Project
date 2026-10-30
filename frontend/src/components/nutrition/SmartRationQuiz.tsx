@@ -1,23 +1,27 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { RationRecommendationInput, FeedRecommendationResult, Product } from '../../types';
+import { ProductImage } from '../common/ProductImage';
 import {
   Calculator,
   CheckCircle2,
   ArrowRight,
   ArrowLeft,
-  Sparkles,
   ShoppingBag,
   Check,
   AlertTriangle,
 } from 'lucide-react';
 
+/**
+ * Rule-based ration calculator (no AI claims). Uses standard DMI heuristics and
+ * real catalogue SKUs; monthly cost is computed from live product prices.
+ * Framed as an estimate — not a veterinary prescription.
+ */
 export const SmartRationQuiz: React.FC = () => {
-  const { addToCart, setCurrentView, setIsCartDrawerOpen, products, addToast } = useApp();
+  const { addToCart, setIsCartDrawerOpen, products, addToast } = useApp();
 
   const [step, setStep] = useState<number>(1);
 
-  // Form State - start with empty/invalid values so user MUST make selections
   const [formData, setFormData] = useState<RationRecommendationInput>({
     animalType: 'Cow',
     milkYieldLiters: 0,
@@ -28,9 +32,7 @@ export const SmartRationQuiz: React.FC = () => {
     numberOfAnimals: 0,
   });
 
-  // Track which fields the user has explicitly confirmed (prevents skip-with-defaults)
   const [confirmedFields, setConfirmedFields] = useState<Set<string>>(new Set());
-
   const [recommendationResult, setRecommendationResult] = useState<FeedRecommendationResult | null>(null);
 
   const toggleGoal = (goal: string) => {
@@ -49,13 +51,11 @@ export const SmartRationQuiz: React.FC = () => {
 
   const canProceed = (required: string[]): boolean => required.every((f) => confirmedFields.has(f));
 
-  // Step 1 validation: animal type must be explicitly chosen
   const handleAnimalSelect = (type: string) => {
-    setFormData((prev) => ({ ...prev, animalType: type as any }));
+    setFormData((prev) => ({ ...prev, animalType: type as RationRecommendationInput['animalType'] }));
     markConfirmed('animalType');
   };
 
-  // Step 2 validation: milk yield and animals must be set to non-zero
   const handleYieldChange = (value: number) => {
     setFormData((prev) => ({ ...prev, milkYieldLiters: value }));
     if (value > 0) markConfirmed('milkYieldLiters');
@@ -66,27 +66,25 @@ export const SmartRationQuiz: React.FC = () => {
     if (num > 0) markConfirmed('numberOfAnimals');
   };
 
-  // Step 3 validation: lactation stage must be chosen
   const handleLactationSelect = (stage: string) => {
-    setFormData((prev) => ({ ...prev, lactationStage: stage as any }));
+    setFormData((prev) => ({ ...prev, lactationStage: stage as RationRecommendationInput['lactationStage'] }));
     markConfirmed('lactationStage');
   };
 
-  // Step 4 validation: at least one health goal + fat target > 0
   const handleFatTarget = (value: number) => {
     setFormData((prev) => ({ ...prev, fatPercentTarget: value }));
     if (value > 0) markConfirmed('fatPercentTarget');
   };
 
-  // Step 5 validation: current feed type must be selected
   const handleFeedType = (value: string) => {
     setFormData((prev) => ({ ...prev, currentFeedType: value }));
     markConfirmed('currentFeedType');
   };
 
   /**
-   * Accurate ration calculation based on all inputs.
-   * Uses dry matter intake principles and stage-specific adjustments.
+   * Estimate daily ration kg from milk yield, animal type and lactation stage.
+   * Uses common dairy nutrition rules of thumb (DMI ≈ 3–4% BW; concentrate
+   * scaled to yield). Not a substitute for a qualified nutritionist.
    */
   const handleCalculateRation = () => {
     const bySku = (sku: string): Product | undefined => products.find((p) => p.sku === sku);
@@ -100,7 +98,7 @@ export const SmartRationQuiz: React.FC = () => {
 
     const required = [cowFeed, buffaloFeed, calfFeed, calciumProduct];
     if (!required.every(Boolean)) {
-      addToast('The ration quiz needs catalogue products to calculate. Please seed the database.', 'error');
+      addToast('The ration calculator needs catalogue products to estimate costs. Please seed the database.', 'error');
       return;
     }
 
@@ -109,150 +107,127 @@ export const SmartRationQuiz: React.FC = () => {
       milkYieldLiters,
       fatPercentTarget,
       lactationStage,
-      currentFeedType,
       healthGoals,
       numberOfAnimals,
     } = formData;
 
-    // --- Base Dry Matter Intake (DMI) as % of body weight ---
-    // Approx: DMI = 2.5% to 3.5% of body weight depending on yield & stage
-    // We estimate daily ration kg directly from milk yield + stage
     let baseRationKg: number;
-    let proteinPct: number;
     let energyNote: string;
 
     switch (animalType) {
       case 'Buffalo':
         baseRationKg = Math.max(4, Math.round(milkYieldLiters * 0.5 + 2));
-        proteinPct = 20;
-        energyNote = 'High bypass protein & fat for 7.0%+ buffalo milk fat';
+        energyNote = 'High bypass protein & fat suited to buffalo milk fat synthesis';
         break;
       case 'Calf':
         baseRationKg = Math.max(1, Math.round(milkYieldLiters * 0.3 + 0.5));
-        proteinPct = 24;
-        energyNote = 'Rumen-developing micro-pellets with probiotics';
+        energyNote = 'Rumen-developing starter with probiotics for growing calves';
         break;
       case 'Pregnant Heifer':
         baseRationKg = Math.max(3, Math.round(milkYieldLiters * 0.35 + 1.5));
-        proteinPct = 18;
         energyNote = 'Steam-up ration for pre-calving body condition';
         break;
       case 'Cow':
       default:
         baseRationKg = Math.max(4, Math.round(milkYieldLiters * 0.45 + 1.5));
-        proteinPct = 22;
-        energyNote = 'Bypass protein & TDN for sustained milk yield';
+        energyNote = 'Bypass protein & TDN to support sustained milk yield';
         break;
     }
 
-    // Lactation stage adjustments
     let stageMultiplier = 1.0;
     let stageReason = '';
     switch (lactationStage) {
       case 'Early (1-3 Mo)':
         stageMultiplier = 1.15;
-        stageReason = 'Peak energy demand - higher bypass fat to prevent weight loss';
+        stageReason = 'Higher energy demand in early lactation';
         break;
       case 'Peak (3-6 Mo)':
         stageMultiplier = 1.1;
-        stageReason = 'Maximum yield output - high protein pellet feed';
+        stageReason = 'Peak yield window — protein-forward concentrate';
         break;
       case 'Late (6-10 Mo)':
         stageMultiplier = 0.9;
-        stageReason = 'Body weight recovery - moderate energy';
+        stageReason = 'Moderate energy as yield declines';
         break;
       case 'Dry Period':
         stageMultiplier = 0.7;
-        stageReason = 'Pre-calving steam feed - controlled energy';
+        stageReason = 'Controlled energy before calving';
         break;
     }
 
     const dailyRationKg = Math.max(1, Math.round(baseRationKg * stageMultiplier * 10) / 10);
 
-    // --- Product selection based on animal + goals ---
     const primaryProduct =
       animalType === 'Buffalo'
         ? buffaloFeed
         : animalType === 'Calf'
           ? calfFeed
-          : animalType === 'Pregnant Heifer'
-            ? cowFeed
-            : cowFeed;
+          : cowFeed;
 
     const recommendedProducts: FeedRecommendationResult['recommendedProducts'] = [];
 
-    // Primary feed
     if (primaryProduct) {
       recommendedProducts.push({
         product: primaryProduct,
         dailyQtyKg: animalType === 'Calf' ? Math.max(0.25, dailyRationKg * 0.6) : dailyRationKg * 0.7,
-        reasoning: energyNote,
+        reasoning: `${energyNote}. ${stageReason}.`,
       });
     }
 
-    // Mineral mixture - always recommended
     if (mineralProduct) {
       recommendedProducts.push({
         product: mineralProduct,
         dailyQtyKg: 0.06,
-        reasoning: 'Chelated trace minerals for heat cycles, hoof health & immunity',
+        reasoning: 'Trace minerals for heat cycles, hoof health and immunity',
       });
     }
 
-    // Calcium - for milking animals in early/peak lactation
-    if (calciumProduct && (lactationStage === 'Early (1-3 Mo)' || lactationStage === 'Peak (3-6 Mo)' || animalType === 'Pregnant Heifer')) {
+    if (
+      calciumProduct &&
+      (lactationStage === 'Early (1-3 Mo)' || lactationStage === 'Peak (3-6 Mo)' || animalType === 'Pregnant Heifer')
+    ) {
       recommendedProducts.push({
         product: calciumProduct,
         dailyQtyKg: 0.1,
-        reasoning: 'Ionic calcium to prevent milk fever & support post-calving letdown',
+        reasoning: 'Ionic calcium to support post-calving calcium balance',
       });
     }
 
-    // Bypass fat - for high yield or fat-boost goal
-    const wantsFatBoost = healthGoals.includes('Milk Fat % Boost (SNF)') || milkYieldLiters >= 15 || fatPercentTarget > 6;
+    const wantsFatBoost =
+      healthGoals.includes('Milk Fat % Boost (SNF)') || milkYieldLiters >= 15 || fatPercentTarget > 6;
     if (bypassFatProduct && wantsFatBoost) {
       recommendedProducts.push({
         product: bypassFatProduct,
         dailyQtyKg: 0.15,
-        reasoning: `Fractionated fatty acids to lift fat test toward ${fatPercentTarget}% and prevent negative energy balance`,
+        reasoning: 'Bypass fat to support energy balance when targeting higher fat test',
       });
     }
 
-    // --- Accurate estimates ---
-    const isHighYield = milkYieldLiters >= 15;
-    const yieldIncrease = animalType === 'Buffalo'
-      ? (1.2 + numberOfAnimals * 0.15).toFixed(1)
-      : (1.5 + numberOfAnimals * 0.2).toFixed(1);
-
-    const fatBoost = animalType === 'Buffalo'
-      ? (wantsFatBoost ? 0.8 : 0.3).toFixed(1)
-      : (wantsFatBoost ? 0.5 : 0.2).toFixed(1);
-
     const healthBenefits: string[] = [
-      'Optimal rumen pH preventing acidosis',
-      'Improves conception rate in next heat cycle',
+      'Forage-to-concentrate balance supports rumen health',
+      'Mineral mix covers common deficiencies in stall-fed herds',
     ];
     if (healthGoals.includes('Prevent Post-Calving Milk Fever') || lactationStage === 'Early (1-3 Mo)') {
-      healthBenefits.push('Ionic calcium protection against post-calving milk fever');
+      healthBenefits.push('Calcium support around calving (monitor with your vet for milk fever risk)');
     }
     if (wantsFatBoost) {
-      healthBenefits.push('Bypass fat sustains milk fat during peak yield');
+      healthBenefits.push('Bypass fat included for energy density during peak yield');
     }
     if (animalType === 'Calf') {
-      healthBenefits.push('Accelerates rumen development for early weaning');
+      healthBenefits.push('Starter feed supports early rumen development');
     }
 
-    // Monthly cost: daily ration kg × price per kg × days × animals
-    const primaryPrice = primaryProduct ? primaryProduct.price / primaryProduct.weightOptions[0].weightKg : 36;
+    const primaryPrice = primaryProduct ? primaryProduct.price / (primaryProduct.weightOptions[0]?.weightKg || 50) : 36;
     const monthlyCostEstimate = Math.round(dailyRationKg * primaryPrice * 30 * numberOfAnimals);
 
     const result: FeedRecommendationResult = {
       dailyRationKg,
       recommendedProducts,
-      expectedYieldIncrease: `+${yieldIncrease} Liters / Day per animal`,
-      estimatedFatBoost: `+${fatBoost}% Fat Test Boost`,
+      targetFatPercent: fatPercentTarget,
       healthBenefits,
       monthlyCostEstimate,
+      disclaimer:
+        'Estimates only, based on standard dairy nutrition rules of thumb and current catalogue prices. Actual requirements depend on body weight, fodder quality, water and health status — confirm with a qualified nutritionist or veterinarian before changing the ration.',
     };
 
     setRecommendationResult(result);
@@ -269,19 +244,17 @@ export const SmartRationQuiz: React.FC = () => {
     }
   };
 
-  // --- Step Renders ---
-
   const step1 = (
-    <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+    <div className="card space-y-6 p-6 sm:p-8">
       <div>
-        <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md uppercase">
+        <span className="mb-2 inline-block rounded-md bg-pine-soft px-2.5 py-0.5 text-xs font-bold uppercase text-pine">
           Step 1 of 6
         </span>
-        <h2 className="text-2xl font-black text-slate-900 mt-2">What animals do you keep on your farm?</h2>
-        <p className="text-slate-500 text-xs mt-1">Select the primary animal type - this determines the base ration.</p>
+        <h2 className="mt-2 text-2xl text-ink">What animals do you keep on your farm?</h2>
+        <p className="mt-1 text-xs text-ink-soft">Select the primary animal type — this sets the base ration.</p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         {[
           { type: 'Cow', emoji: '🐄', desc: 'HF / Jersey / Gir Cross' },
           { type: 'Buffalo', emoji: '🦬', desc: 'Murrah / Nili-Ravi' },
@@ -293,58 +266,55 @@ export const SmartRationQuiz: React.FC = () => {
             <button
               key={item.type}
               onClick={() => handleAnimalSelect(item.type)}
-              className={`p-4 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center space-y-2 ${
+              className={`flex cursor-pointer flex-col items-center justify-center space-y-2 rounded-2xl border p-4 text-center transition-all ${
                 selected
-                  ? 'border-emerald-700 bg-emerald-50/80 ring-2 ring-emerald-600/20 shadow-xs'
-                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+                  ? 'border-pine bg-pine-soft ring-2 ring-pine/20'
+                  : 'border-line bg-cream hover:bg-pine-soft/50'
               }`}
-              disabled={!canProceed(['animalType'])}
             >
               <span className="text-3xl">{item.emoji}</span>
-              <div className="font-bold text-slate-900 text-sm">{item.type}</div>
-              <div className="text-[10px] text-slate-500">{item.desc}</div>
+              <div className="text-sm font-bold text-ink">{item.type}</div>
+              <div className="text-[10px] text-ink-soft">{item.desc}</div>
             </button>
           );
         })}
       </div>
 
       {!confirmedFields.has('animalType') && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 p-3 rounded-xl mt-2">
-          <AlertTriangle className="w-4 h-4" />
+        <div className="mt-2 flex items-center gap-2 rounded-xl bg-ochre-soft p-3 text-[10px] text-ink">
+          <AlertTriangle className="h-4 w-4 text-ochre" />
           <span>Please select your animal type to continue.</span>
         </div>
       )}
 
-      <div className="flex justify-end pt-4 border-t border-slate-100">
+      <div className="flex justify-end border-t border-line pt-4">
         <button
           onClick={() => setStep(2)}
           disabled={!canProceed(['animalType'])}
-          className={`bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-6 py-3 rounded-2xl flex items-center gap-2 cursor-pointer ${
-            !canProceed(['animalType']) ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className="btn btn-primary disabled:opacity-50"
         >
           <span>Continue</span>
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>
   );
 
   const step2 = (
-    <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+    <div className="card space-y-6 p-6 sm:p-8">
       <div>
-        <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md uppercase">
+        <span className="mb-2 inline-block rounded-md bg-pine-soft px-2.5 py-0.5 text-xs font-bold uppercase text-pine">
           Step 2 of 6
         </span>
-        <h2 className="text-2xl font-black text-slate-900 mt-2">Milk Yield & Herd Size</h2>
-        <p className="text-slate-500 text-xs mt-1">Specify daily milk yield per animal and total herd size.</p>
+        <h2 className="mt-2 text-2xl text-ink">Milk Yield & Herd Size</h2>
+        <p className="mt-1 text-xs text-ink-soft">Daily milk yield per animal and total animals on the farm.</p>
       </div>
 
       <div className="space-y-6">
         <div>
-          <div className="flex justify-between items-center mb-2 text-xs font-bold">
-            <span className="text-slate-700">Daily Milk Yield per Animal:</span>
-            <span className="text-emerald-800 font-extrabold text-sm">{formData.milkYieldLiters} Liters / Day</span>
+          <div className="mb-2 flex items-center justify-between text-xs font-bold">
+            <span className="text-ink">Daily milk yield per animal:</span>
+            <span className="text-sm text-pine">{formData.milkYieldLiters} L / day</span>
           </div>
           <input
             type="range"
@@ -352,156 +322,134 @@ export const SmartRationQuiz: React.FC = () => {
             max="35"
             value={formData.milkYieldLiters}
             onChange={(e) => handleYieldChange(Number(e.target.value))}
-            className="w-full accent-emerald-800 cursor-pointer"
+            className="w-full cursor-pointer accent-pine"
           />
-          <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-            <span>0L (Dry/Calf)</span>
-            <span>10L (Average)</span>
-            <span>25L (High-Yield)</span>
-            <span>35L (Elite)</span>
+          <div className="mt-1 flex justify-between text-[10px] text-ink-soft">
+            <span>0 L (dry/calf)</span>
+            <span>10 L</span>
+            <span>25 L</span>
+            <span>35 L</span>
           </div>
         </div>
 
         <div>
-          <label className="text-xs font-bold text-slate-700 block mb-2">Number of Animals on Farm:</label>
-          <div className="flex items-center gap-3">
+          <label className="mb-2 block text-xs font-bold text-ink">Number of animals on farm:</label>
+          <div className="flex flex-wrap items-center gap-3">
             {[1, 2, 5, 10, 20, 50].map((num) => (
               <button
                 key={num}
                 onClick={() => handleAnimalCount(num)}
-                className={`px-4 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                className={`cursor-pointer rounded-xl border px-4 py-2 text-xs font-bold transition-all ${
                   formData.numberOfAnimals === num
-                    ? 'bg-emerald-800 text-white border-emerald-800'
-                    : 'bg-slate-50 text-slate-700 border-slate-200'
+                    ? 'border-pine bg-pine text-white'
+                    : 'border-line bg-cream text-ink hover:border-pine/40'
                 }`}
               >
-                {num} Animals
+                {num} {num === 1 ? 'animal' : 'animals'}
               </button>
             ))}
           </div>
         </div>
       </div>
 
-      {!confirmedFields.has('milkYieldLiters') && formData.milkYieldLiters === 0 && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 p-3 rounded-xl mt-2">
-          <AlertTriangle className="w-4 h-4" />
-          <span>Please adjust the milk yield slider - 0L is not valid for milking animals.</span>
+      {formData.milkYieldLiters === 0 && (
+        <div className="mt-2 flex items-center gap-2 rounded-xl bg-ochre-soft p-3 text-[10px] text-ink">
+          <AlertTriangle className="h-4 w-4 text-ochre" />
+          <span>Set a milk yield above 0 L for milking animals (use the calf path for young stock).</span>
         </div>
       )}
-      {!confirmedFields.has('numberOfAnimals') && formData.numberOfAnimals === 0 && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 p-3 rounded-xl mt-2">
-          <AlertTriangle className="w-4 h-4" />
+      {formData.numberOfAnimals === 0 && (
+        <div className="mt-2 flex items-center gap-2 rounded-xl bg-ochre-soft p-3 text-[10px] text-ink">
+          <AlertTriangle className="h-4 w-4 text-ochre" />
           <span>Please select the number of animals.</span>
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-        <button
-          onClick={() => setStep(1)}
-          className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
+      <div className="flex items-center justify-between border-t border-line pt-4">
+        <button onClick={() => setStep(1)} className="flex cursor-pointer items-center gap-1 text-xs font-bold text-ink-soft hover:text-ink">
+          <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
         </button>
         <button
           onClick={() => setStep(3)}
-          disabled={
-            !confirmedFields.has('milkYieldLiters') ||
-            !confirmedFields.has('numberOfAnimals') ||
-            formData.milkYieldLiters === 0 ||
-            formData.numberOfAnimals === 0
-          }
-          className={`bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-6 py-3 rounded-2xl flex items-center gap-2 cursor-pointer ${
-            !confirmedFields.has('milkYieldLiters') ||
-            !confirmedFields.has('numberOfAnimals') ||
-            formData.milkYieldLiters === 0 ||
-            formData.numberOfAnimals === 0
-              ? 'opacity-50 cursor-not-allowed'
-              : ''
-          }`}
+          disabled={formData.milkYieldLiters === 0 || formData.numberOfAnimals === 0}
+          className="btn btn-primary disabled:opacity-50"
         >
           <span>Continue</span>
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>
   );
 
   const step3 = (
-    <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+    <div className="card space-y-6 p-6 sm:p-8">
       <div>
-        <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md uppercase">
+        <span className="mb-2 inline-block rounded-md bg-pine-soft px-2.5 py-0.5 text-xs font-bold uppercase text-pine">
           Step 3 of 6
         </span>
-        <h2 className="text-2xl font-black text-slate-900 mt-2">Lactation / Gestation Stage</h2>
-        <p className="text-slate-500 text-xs mt-1">Stage determines energy and bypass protein requirements.</p>
+        <h2 className="mt-2 text-2xl text-ink">Lactation / Gestation Stage</h2>
+        <p className="mt-1 text-xs text-ink-soft">Stage adjusts energy and protein requirements in the estimate.</p>
       </div>
 
       <div className="space-y-3">
         {[
-          { stage: 'Early (1-3 Mo)', desc: 'Peak energy drop & body weight loss risk. High bypass fat needed.' },
-          { stage: 'Peak (3-6 Mo)', desc: 'Maximum milk yield output. High protein pellet feed needed.' },
-          { stage: 'Late (6-10 Mo)', desc: 'Preparing for dry period and body weight recovery.' },
-          { stage: 'Dry Period', desc: 'Pre-calving steam feed - controlled energy intake.' },
+          { stage: 'Early (1-3 Mo)', desc: 'Higher energy demand; body-condition loss risk.' },
+          { stage: 'Peak (3-6 Mo)', desc: 'Maximum yield window; protein-forward concentrate.' },
+          { stage: 'Late (6-10 Mo)', desc: 'Yield declining; moderate energy.' },
+          { stage: 'Dry Period', desc: 'Pre-calving; controlled energy intake.' },
         ].map((st) => {
           const selected = formData.lactationStage === st.stage;
           return (
             <button
               key={st.stage}
               onClick={() => handleLactationSelect(st.stage)}
-              className={`w-full p-4 rounded-2xl border text-left transition-all cursor-pointer ${
-                selected
-                  ? 'border-emerald-700 bg-emerald-50/80 ring-2 ring-emerald-600/20'
-                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100'
+              className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-all ${
+                selected ? 'border-pine bg-pine-soft ring-2 ring-pine/20' : 'border-line bg-cream hover:bg-pine-soft/50'
               }`}
             >
-              <div className="font-bold text-slate-900 text-sm">{st.stage}</div>
-              <div className="text-xs text-slate-500 mt-0.5">{st.desc}</div>
+              <div className="text-sm font-bold text-ink">{st.stage}</div>
+              <div className="mt-0.5 text-xs text-ink-soft">{st.desc}</div>
             </button>
           );
         })}
       </div>
 
       {!confirmedFields.has('lactationStage') && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 p-3 rounded-xl mt-2">
-          <AlertTriangle className="w-4 h-4" />
+        <div className="flex items-center gap-2 rounded-xl bg-ochre-soft p-3 text-[10px] text-ink">
+          <AlertTriangle className="h-4 w-4 text-ochre" />
           <span>Please select a lactation stage.</span>
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-        <button
-          onClick={() => setStep(2)}
-          className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
+      <div className="flex items-center justify-between border-t border-line pt-4">
+        <button onClick={() => setStep(2)} className="flex cursor-pointer items-center gap-1 text-xs font-bold text-ink-soft hover:text-ink">
+          <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
         </button>
         <button
           onClick={() => setStep(4)}
           disabled={!canProceed(['lactationStage'])}
-          className={`bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-6 py-3 rounded-2xl flex items-center gap-2 cursor-pointer ${
-            !canProceed(['lactationStage']) ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className="btn btn-primary disabled:opacity-50"
         >
           <span>Continue</span>
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>
   );
 
   const step4 = (
-    <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+    <div className="card space-y-6 p-6 sm:p-8">
       <div>
-        <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md uppercase">
+        <span className="mb-2 inline-block rounded-md bg-pine-soft px-2.5 py-0.5 text-xs font-bold uppercase text-pine">
           Step 4 of 6
         </span>
-        <h2 className="text-2xl font-black text-slate-900 mt-2">Primary Goals</h2>
-        <p className="text-slate-500 text-xs mt-1">Select one or more targets for your herd's nutrition plan.</p>
+        <h2 className="mt-2 text-2xl text-ink">Primary Goals</h2>
+        <p className="mt-1 text-xs text-ink-soft">Pick one or more targets for the ration estimate.</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {[
           'Milk Fat % Boost (SNF)',
           'Milk Volume Increase (+2L/day)',
@@ -515,23 +463,21 @@ export const SmartRationQuiz: React.FC = () => {
             <button
               key={goal}
               onClick={() => toggleGoal(goal)}
-              className={`p-3.5 rounded-2xl border text-left text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
-                selected
-                  ? 'border-emerald-700 bg-emerald-50 text-emerald-900 ring-2 ring-emerald-600/20'
-                  : 'border-slate-200 bg-slate-50 text-slate-700'
+              className={`flex cursor-pointer items-center justify-between rounded-2xl border p-3.5 text-left text-xs font-bold transition-all ${
+                selected ? 'border-pine bg-pine-soft text-pine ring-2 ring-pine/20' : 'border-line bg-cream text-ink'
               }`}
             >
               <span>{goal}</span>
-              {selected && <Check className="w-4 h-4 text-emerald-700" />}
+              {selected && <Check className="h-4 w-4 text-pine" />}
             </button>
           );
         })}
       </div>
 
       <div className="mt-6">
-        <div className="flex justify-between items-center mb-2 text-xs font-bold">
-          <span className="text-slate-700">Target Milk Fat %:</span>
-          <span className="text-emerald-800 font-extrabold text-sm">{formData.fatPercentTarget}%</span>
+        <div className="mb-2 flex items-center justify-between text-xs font-bold">
+          <span className="text-ink">Target milk fat %:</span>
+          <span className="text-sm text-pine">{formData.fatPercentTarget}%</span>
         </div>
         <input
           type="range"
@@ -540,224 +486,188 @@ export const SmartRationQuiz: React.FC = () => {
           step="0.5"
           value={formData.fatPercentTarget}
           onChange={(e) => handleFatTarget(parseFloat(e.target.value))}
-          className="w-full accent-emerald-800 cursor-pointer"
+          className="w-full cursor-pointer accent-pine"
         />
-        <div className="flex justify-between text-[10px] text-slate-400 mt-1">
-          <span>3.0% (Low)</span>
-          <span>6.0% (Buffalo)</span>
-          <span>9.0% (Elite)</span>
+        <div className="mt-1 flex justify-between text-[10px] text-ink-soft">
+          <span>3.0%</span>
+          <span>6.0%</span>
+          <span>9.0%</span>
         </div>
       </div>
 
-      {!confirmedFields.has('healthGoals') && formData.healthGoals.length === 0 && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 p-3 rounded-xl mt-3">
-          <AlertTriangle className="w-4 h-4" />
-          <span>Please select at least one health goal.</span>
+      {formData.healthGoals.length === 0 && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl bg-ochre-soft p-3 text-[10px] text-ink">
+          <AlertTriangle className="h-4 w-4 text-ochre" />
+          <span>Please select at least one goal.</span>
         </div>
       )}
-      {!confirmedFields.has('fatPercentTarget') && formData.fatPercentTarget === 0 && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 p-3 rounded-xl mt-2">
-          <AlertTriangle className="w-4 h-4" />
+      {formData.fatPercentTarget === 0 && (
+        <div className="mt-2 flex items-center gap-2 rounded-xl bg-ochre-soft p-3 text-[10px] text-ink">
+          <AlertTriangle className="h-4 w-4 text-ochre" />
           <span>Please set a target fat percentage.</span>
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-        <button
-          onClick={() => setStep(3)}
-          className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
+      <div className="flex items-center justify-between border-t border-line pt-4">
+        <button onClick={() => setStep(3)} className="flex cursor-pointer items-center gap-1 text-xs font-bold text-ink-soft hover:text-ink">
+          <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
         </button>
         <button
           onClick={() => setStep(5)}
-          disabled={
-            formData.healthGoals.length === 0 ||
-            !confirmedFields.has('fatPercentTarget') ||
-            formData.fatPercentTarget === 0
-          }
-          className={`bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-6 py-3 rounded-2xl flex items-center gap-2 cursor-pointer ${
-            formData.healthGoals.length === 0 ||
-            !confirmedFields.has('fatPercentTarget') ||
-            formData.fatPercentTarget === 0
-              ? 'opacity-50 cursor-not-allowed'
-              : ''
-          }`}
+          disabled={formData.healthGoals.length === 0 || formData.fatPercentTarget === 0}
+          className="btn btn-primary disabled:opacity-50"
         >
           <span>Continue</span>
-          <ArrowRight className="w-4 h-4" />
+          <ArrowRight className="h-4 w-4" />
         </button>
       </div>
     </div>
   );
 
   const step5 = (
-    <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
+    <div className="card space-y-6 p-6 sm:p-8">
       <div>
-        <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md uppercase">
+        <span className="mb-2 inline-block rounded-md bg-pine-soft px-2.5 py-0.5 text-xs font-bold uppercase text-pine">
           Step 5 of 6
         </span>
-        <h2 className="text-2xl font-black text-slate-900 mt-2">Current Feed Being Used</h2>
-        <p className="text-slate-500 text-xs mt-1">What are you currently feeding your cattle?</p>
+        <h2 className="mt-2 text-2xl text-ink">Current Feed Being Used</h2>
+        <p className="mt-1 text-xs text-ink-soft">What are you currently feeding your cattle?</p>
       </div>
 
       <div>
         <select
           value={formData.currentFeedType}
           onChange={(e) => handleFeedType(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-200 font-bold text-slate-800 text-xs rounded-xl p-3.5 outline-none focus:border-emerald-600"
+          className="field w-full"
         >
           <option value="">-- Select current feed --</option>
-          <option value="Local Cottonseed Cake & Wheat Straw">Local Cottonseed Cake & Wheat Straw</option>
-          <option value="Home-made Mash Feed Mix">Home-made Mash Feed Mix</option>
-          <option value="Standard Local Pellet Feed">Standard Local Pellet Feed</option>
-          <option value="Green Napier Fodder + Dry Straw">Green Napier Fodder + Dry Straw</option>
-          <option value="Commercial Compound Feed">Commercial Compound Feed</option>
+          <option value="Local Cottonseed Cake & Wheat Straw">Local cottonseed cake & wheat straw</option>
+          <option value="Home-made Mash Feed Mix">Home-made mash feed mix</option>
+          <option value="Standard Local Pellet Feed">Standard local pellet feed</option>
+          <option value="Green Napier Fodder + Dry Straw">Green napier fodder + dry straw</option>
+          <option value="Commercial Compound Feed">Commercial compound feed</option>
         </select>
       </div>
 
-      {!confirmedFields.has('currentFeedType') && !formData.currentFeedType && (
-        <div className="flex items-center gap-2 text-[10px] text-amber-700 bg-amber-50 p-3 rounded-xl mt-3">
-          <AlertTriangle className="w-4 h-4" />
+      {!formData.currentFeedType && (
+        <div className="mt-3 flex items-center gap-2 rounded-xl bg-ochre-soft p-3 text-[10px] text-ink">
+          <AlertTriangle className="h-4 w-4 text-ochre" />
           <span>Please select your current feed type.</span>
         </div>
       )}
 
-      <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-        <button
-          onClick={() => setStep(4)}
-          className="text-xs font-bold text-slate-600 flex items-center gap-1 cursor-pointer"
-        >
-          <ArrowLeft className="w-4 h-4" />
+      <div className="flex items-center justify-between border-t border-line pt-4">
+        <button onClick={() => setStep(4)} className="flex cursor-pointer items-center gap-1 text-xs font-bold text-ink-soft hover:text-ink">
+          <ArrowLeft className="h-4 w-4" />
           <span>Back</span>
         </button>
         <button
           onClick={handleCalculateRation}
           disabled={!formData.currentFeedType}
-          className={`bg-gradient-to-r from-emerald-800 to-teal-800 hover:from-emerald-900 hover:to-teal-900 text-white font-bold text-xs px-8 py-3.5 rounded-2xl flex items-center gap-2 shadow-lg cursor-pointer ${
-            !formData.currentFeedType ? 'opacity-50 cursor-not-allowed' : ''
-          }`}
+          className="btn btn-primary disabled:opacity-50"
         >
-          <Sparkles className="w-4 h-4 text-amber-300" />
-          <span>Calculate AI Feed Plan</span>
+          <Calculator className="h-4 w-4" />
+          <span>Calculate feed plan</span>
         </button>
       </div>
     </div>
   );
 
-  // --- Step 6 Results ---
   const step6 = (
-    <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xl space-y-6">
-      <div className="text-center pb-4 border-b border-slate-100">
-        <div className="w-12 h-12 bg-emerald-100 text-emerald-800 rounded-full flex items-center justify-center mx-auto mb-2">
-          <CheckCircle2 className="w-7 h-7" />
+    <div className="card space-y-6 p-6 sm:p-8 shadow-lg">
+      <div className="border-b border-line pb-4 text-center">
+        <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-pine-soft text-pine">
+          <CheckCircle2 className="h-7 w-7" />
         </div>
-        <span className="text-xs font-bold text-emerald-800 uppercase bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full">
-          AI Ration Calculation Complete
+        <span className="inline-block rounded-full border border-pine/20 bg-pine-soft px-3 py-1 text-xs font-bold uppercase text-pine">
+          Feed plan estimate ready
         </span>
-        <h2 className="text-2xl font-black text-slate-900 mt-2">Recommended Feed Ration Plan</h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Optimized for {formData.numberOfAnimals} {formData.animalType}s giving {formData.milkYieldLiters}L daily milk.
+        <h2 className="mt-2 text-2xl text-ink">Recommended ration plan</h2>
+        <p className="mt-1 text-xs text-ink-soft">
+          For {formData.numberOfAnimals} {formData.animalType}
+          {formData.numberOfAnimals > 1 ? 's' : ''} giving {formData.milkYieldLiters} L daily milk.
         </p>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="p-3 bg-emerald-50 rounded-2xl border border-emerald-200 text-center">
-          <div className="text-xs text-slate-500 font-semibold">Expected Yield</div>
-          <div className="text-sm sm:text-base font-black text-emerald-800 mt-0.5">
-            {recommendationResult?.expectedYieldIncrease}
-          </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-pine/20 bg-pine-soft p-3 text-center">
+          <div className="text-xs font-semibold text-ink-soft">Daily ration / animal</div>
+          <div className="mt-0.5 text-base text-pine">{recommendationResult?.dailyRationKg} kg</div>
         </div>
-
-        <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-center">
-          <div className="text-xs text-slate-500 font-semibold">Fat Boost</div>
-          <div className="text-sm sm:text-base font-black text-amber-900 mt-0.5">
-            {recommendationResult?.estimatedFatBoost}
-          </div>
+        <div className="rounded-2xl border border-ochre/20 bg-ochre-soft p-3 text-center">
+          <div className="text-xs font-semibold text-ink-soft">Target fat test</div>
+          <div className="mt-0.5 text-base text-ink">{recommendationResult?.targetFatPercent}%</div>
         </div>
-
-        <div className="p-3 bg-slate-100 rounded-2xl border border-slate-200 text-center col-span-2 sm:col-span-1">
-          <div className="text-xs text-slate-500 font-semibold">Daily Ration</div>
-          <div className="text-sm sm:text-base font-black text-slate-900 mt-0.5">
-            {recommendationResult?.dailyRationKg} kg / Animal
+        <div className="col-span-2 rounded-2xl border border-line bg-cream p-3 text-center sm:col-span-1">
+          <div className="text-xs font-semibold text-ink-soft">Est. monthly cost</div>
+          <div className="mt-0.5 text-base text-ink">
+            ₹{recommendationResult?.monthlyCostEstimate.toLocaleString('en-IN')}
           </div>
         </div>
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-          Recommended Ration Bundle Products:
-        </h3>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-ink">Recommended products (current catalogue prices):</h3>
         {recommendationResult?.recommendedProducts.map((rec, idx) => (
-          <div key={idx} className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between gap-4">
+          <div key={idx} className="flex items-center justify-between gap-4 rounded-2xl border border-line bg-cream p-4">
             <div className="flex items-center gap-3">
-              <img
-                src={rec.product.image}
-                alt={rec.product.name}
-                className="w-14 h-14 object-cover rounded-xl shrink-0"
-              />
+              <ProductImage src={rec.product.image} alt={rec.product.name} className="h-14 w-14 shrink-0 rounded-xl" />
               <div>
-                <div className="text-[10px] font-bold text-emerald-800 uppercase">{rec.product.brand}</div>
-                <div className="font-bold text-slate-900 text-xs sm:text-sm">{rec.product.name}</div>
-                <p className="text-[11px] text-slate-500 mt-0.5">{rec.reasoning}</p>
+                <div className="text-[10px] font-bold uppercase text-pine">{rec.product.brand}</div>
+                <div className="text-xs font-bold text-ink sm:text-sm">{rec.product.name}</div>
+                <p className="mt-0.5 text-[11px] text-ink-soft">{rec.reasoning}</p>
               </div>
             </div>
-            <div className="text-right shrink-0">
-              <div className="font-black text-slate-900 text-sm">₹{rec.product.price}</div>
-              <div className="text-[10px] text-slate-400">
-                {rec.product.weightOptions[0]?.weightKg} kg Bag
-              </div>
+            <div className="shrink-0 text-right">
+              <div className="text-sm font-bold text-ink">₹{rec.product.price.toLocaleString('en-IN')}</div>
+              <div className="text-[10px] text-ink-soft">{rec.product.weightOptions[0]?.weightKg} kg bag</div>
             </div>
           </div>
         ))}
       </div>
 
-      <div className="bg-slate-50 rounded-2xl border border-slate-100 p-4 mb-4">
-        <h4 className="text-xs font-bold text-slate-700 uppercase mb-2">Health Benefits</h4>
-        <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4">
+      <div className="rounded-2xl border border-line bg-cream p-4">
+        <h4 className="mb-2 text-xs font-bold uppercase text-ink">Notes</h4>
+        <ul className="list-disc space-y-1 pl-4 text-xs text-ink-soft">
           {recommendationResult?.healthBenefits.map((b, i) => (
             <li key={i}>{b}</li>
           ))}
         </ul>
-        <div className="mt-3 pt-3 border-t border-slate-200 flex items-center justify-between text-xs">
-          <span className="text-slate-700 font-bold">Est. Monthly Cost:</span>
-          <span className="font-black text-emerald-800">₹{recommendationResult?.monthlyCostEstimate.toLocaleString()}</span>
-        </div>
       </div>
 
-      <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
-        <button
-          onClick={() => setStep(1)}
-          className="text-xs font-bold text-slate-600 hover:text-slate-900 cursor-pointer"
-        >
-          Recalculate Ration
-        </button>
+      {recommendationResult && (
+        <div className="flex items-start gap-2 rounded-2xl border border-ochre/30 bg-ochre-soft p-4">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-ochre" />
+          <p className="text-[11px] leading-relaxed text-ink">{recommendationResult.disclaimer}</p>
+        </div>
+      )}
 
-        <button
-          onClick={handleAddBundleToCart}
-          className="w-full sm:w-auto bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs sm:text-sm px-8 py-3.5 rounded-2xl flex items-center justify-center gap-2 shadow-lg cursor-pointer"
-        >
-          <ShoppingBag className="w-4 h-4" />
-          <span>Add Complete Ration Bundle to Cart</span>
+      <div className="flex flex-col items-center justify-between gap-4 border-t border-line pt-4 sm:flex-row">
+        <button onClick={() => setStep(1)} className="cursor-pointer text-xs font-bold text-ink-soft hover:text-ink">
+          Recalculate
+        </button>
+        <button onClick={handleAddBundleToCart} className="btn btn-primary w-full sm:w-auto">
+          <ShoppingBag className="h-4 w-4" />
+          <span>Add bundle to cart</span>
         </button>
       </div>
     </div>
   );
 
   return (
-    <div className="bg-transparent text-slate-100 min-h-screen py-12 relative z-10">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs mb-8">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 mb-3">
-            <span className="text-emerald-800 flex items-center gap-1.5">
-              <Calculator className="w-4 h-4" />
-              <span>Smart AI Cattle Feed Advisor</span>
+    <div className="min-h-screen py-12">
+      <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+        <div className="card mb-8 p-6">
+          <div className="mb-3 flex items-center justify-between text-xs font-bold text-ink-soft">
+            <span className="flex items-center gap-1.5 text-pine">
+              <Calculator className="h-4 w-4" />
+              <span>Smart ration calculator</span>
             </span>
             <span>Step {step} of 6</span>
           </div>
-          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-            <div className="bg-emerald-800 h-full transition-all duration-300" style={{ width: `${(step / 6) * 100}%` }} />
+          <div className="h-2 w-full overflow-hidden rounded-full bg-cream">
+            <div className="h-full bg-pine transition-all duration-300" style={{ width: `${(step / 6) * 100}%` }} />
           </div>
         </div>
 

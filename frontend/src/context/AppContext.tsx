@@ -8,7 +8,6 @@ import {
   CartItem,
   Order,
   KhataRecord,
-  Subscription,
   NotificationItem,
   ShippingAddress,
   ProductCategory,
@@ -60,17 +59,15 @@ interface AppContextType {
     shippingAddress: ShippingAddress,
     paymentMethod: Order['paymentMethod'],
     deliveryType: Order['deliveryType'],
-    customCart?: CartItem[]
+    customCart?: CartItem[],
+    /** Staff only: the signed-in customer the order (and Khata charge) belongs to. */
+    customerUserId?: number
   ) => Promise<Order>;
   refreshOrders: () => Promise<void>;
-  fetchKhata: () => Promise<void>;
-  
+  /** Staff may pass { q, status } — the server filters; customers always get their own. */
+  fetchKhata: (filters?: { q?: string; status?: string }) => Promise<void>;
   khataRecords: KhataRecord[];
-  addKhataPayment: (recordId: string, amount: number, notes: string) => void;
-  
-  subscriptions: Subscription[];
-  addSubscription: (product: Product, weightKg: number, qty: number, freqDays: number) => void;
-  cancelSubscription: (subId: string) => void;
+  addKhataPayment: (recordId: string, amount: number, notes: string, paymentMethod?: string) => Promise<boolean>;
   
   notifications: NotificationItem[];
   markNotificationAsRead: (id: string) => void;
@@ -105,17 +102,45 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [cart, setCart] = useState<CartItem[]>([]);
   
-  const [wishlist, setWishlist] = useState<string[]>(['prod-1', 'prod-3']);
+  // Saved items are a local convenience, not a server record. Keyed per user
+  // so one account never sees another account's wishlist on the same browser.
+  const wishlistKey = user?.id ? `hindavi_wishlist:${user.id}` : 'hindavi_wishlist:guest';
+  const [wishlist, setWishlist] = useState<string[]>([]);
+  const [wishlistHydratedKey, setWishlistHydratedKey] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>([]);
   const [activeOrderForTracking, setActiveOrderForTracking] = useState<Order | null>(null);
-  
+
   const [khataRecords, setKhataRecords] = useState<KhataRecord[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  
+
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [isCartDrawerOpen, setIsCartDrawerOpen] = useState(false);
   const [isAIChatOpen, setIsAIChatOpen] = useState(false);
+
+  // Load this user's wishlist whenever the signed-in identity changes.
+  useEffect(() => {
+    let stored: string[] = [];
+    try {
+      const raw = window.localStorage.getItem(wishlistKey);
+      const parsed: unknown = raw ? JSON.parse(raw) : [];
+      stored = Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [];
+    } catch {
+      stored = [];
+    }
+    setWishlist(stored);
+    setWishlistHydratedKey(wishlistKey);
+  }, [wishlistKey]);
+
+  React.useEffect(() => {
+    // Wait until the matching wishlist has been loaded so we never persist
+    // the previous user's list under the new user's key.
+    if (wishlistHydratedKey !== wishlistKey) return;
+    try {
+      window.localStorage.setItem(wishlistKey, JSON.stringify(wishlist));
+    } catch {
+      /* private mode: keep the in-memory list */
+    }
+  }, [wishlist, wishlistKey, wishlistHydratedKey]);
 
   /**
    * Legacy view-switcher bridge (router migration): dozens of components still
@@ -282,35 +307,73 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  /** Loads the signed-in user's orders from the API; no-ops when signed out
-   *  or when the database is not configured. */
+  /** Abort handles for the per-user refetches, so a slow response issued under
+   *  one account cannot overwrite the next account's data. */
+  const ordersAbortRef = React.useRef<AbortController | null>(null);
+  const khataAbortRef = React.useRef<AbortController | null>(null);
+
+  /** Loads the signed-in user's orders from the API. Clears the list when
+   *  signed out so the previous user's orders never linger. */
   const refreshOrders = async (): Promise<void> => {
-    if (!user) return;
+    ordersAbortRef.current?.abort();
+    if (!user) {
+      setOrders([]);
+      return;
+    }
+    const controller = new AbortController();
+    ordersAbortRef.current = controller;
     try {
-      const res = await fetch('/api/orders');
+      const res = await fetch('/api/orders', { signal: controller.signal });
       if (!res.ok) return;
       const data = (await res.json()) as { orders: Order[] };
       setOrders(data.orders);
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
       // Keep the current list if the API is unreachable.
     }
   };
 
-  /** Loads the Khata ledger from the API. Staff see every account; a customer
-   *  sees only their own (the server enforces this). No-ops when signed out. */
-  const fetchKhata = async (): Promise<void> => {
-    if (!user) return;
+  /** Loads the Khata ledger from the API. Staff see every account (optionally
+   *  filtered server-side by search text and lifecycle status); a customer sees
+   *  only their own (the server enforces this). Clears when signed out. */
+  const khataFiltersRef = React.useRef<{ q?: string; status?: string }>({});
+  const fetchKhata = async (filters?: { q?: string; status?: string }): Promise<void> => {
+    if (filters) khataFiltersRef.current = filters;
+    khataAbortRef.current?.abort();
+    if (!user) {
+      setKhataRecords([]);
+      return;
+    }
+    const controller = new AbortController();
+    khataAbortRef.current = controller;
     try {
-      const res = await fetch('/api/khata');
+      const params = new URLSearchParams();
+      const active = khataFiltersRef.current;
+      if (active.q) params.set('q', active.q);
+      if (active.status) params.set('status', active.status);
+      const qs = params.toString();
+      const res = await fetch(`/api/khata${qs ? `?${qs}` : ''}`, { signal: controller.signal });
       if (!res.ok) return;
       const data = (await res.json()) as { accounts: KhataRecord[] };
       setKhataRecords(data.accounts);
-    } catch {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
       // Keep the current list if the API is unreachable.
     }
   };
 
+  // On sign-in, sign-out, or account switch: wipe every session-scoped store
+  // so customer and admin (or two customers) never share identity state.
   useEffect(() => {
+    setOrders([]);
+    setKhataRecords([]);
+    khataFiltersRef.current = {};
+    setCart([]);
+    setNotifications([]);
+    setActiveOrderForTracking(null);
+    setSelectedProduct(null);
+    setSearchQuery('');
+    setSelectedCategory('All');
     void refreshOrders();
     void fetchKhata();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -320,14 +383,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     shippingAddress: ShippingAddress,
     paymentMethod: Order['paymentMethod'],
     deliveryType: Order['deliveryType'],
-    customCart?: CartItem[]
+    customCart?: CartItem[],
+    customerUserId?: number
   ): Promise<Order> => {
     const itemsToOrder = customCart || cart;
 
-    // Try the real API first. The server re-prices every line from the
-    // database, computes GST and decrements stock in one transaction.
+    // The server re-prices every line from the database, computes GST and
+    // decrements stock in one transaction. If it cannot be reached there is no
+    // trustworthy order to record, so fail loudly instead of inventing one.
+    let res: Response;
     try {
-      const res = await fetch('/api/orders', {
+      res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -340,68 +406,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           shippingAddress,
           paymentMethod,
           deliveryType,
+          ...(customerUserId ? { customerUserId } : {}),
         }),
       });
-
-      if (res.ok) {
-        const data = (await res.json()) as { order: Order };
-        finishOrder(data.order, itemsToOrder);
-        return data.order;
-      }
-
-      const errorBody = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-      if (res.status !== 503) {
-        // A real failure (out of stock, validation) should stop the flow.
-        addToast(errorBody.message ?? 'Could not place the order.', 'error');
-        throw new Error(errorBody.message ?? 'Could not place the order. Please try again.');
-      }
-      // 503 means the DB is not configured: fall through to local demo flow.
-    } catch (error) {
-      if (error instanceof TypeError) {
-        // Network error - no API at all; fall through to local flow.
-      } else {
-        throw error;
-      }
+    } catch {
+      const message = 'Could not reach the store server. Check your connection and try again.';
+      addToast(message, 'error');
+      throw new Error(message);
     }
 
-    const localOrder = buildLocalOrder(itemsToOrder, shippingAddress, paymentMethod, deliveryType);
-    finishOrder(localOrder, itemsToOrder);
-    return localOrder;
+    if (res.ok) {
+      const data = (await res.json()) as { order: Order };
+      finishOrder(data.order, itemsToOrder);
+      return data.order;
+    }
+
+    const errorBody = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+    const message =
+      res.status === 503
+        ? 'Ordering is temporarily unavailable. Please try again shortly or call the store.'
+        : errorBody.message ?? 'Could not place the order. Please try again.';
+    addToast(message, 'error');
+    throw new Error(message);
   };
 
   const finishOrder = (newOrder: Order, itemsToOrder: CartItem[]) => {
     setOrders((prev) => [newOrder, ...prev]);
-
-    if (newOrder.paymentMethod === 'Khata Credit') {
-      setKhataRecords((prev) => {
-        const existing = prev.find((k) => k.customerName.toLowerCase().includes(newOrder.shippingAddress.fullName.toLowerCase()));
-        if (existing) {
-          return prev.map((k) => {
-            if (k.id === existing.id) {
-              return {
-                ...k,
-                totalOutstanding: k.totalOutstanding + newOrder.totalAmount,
-                lastPurchaseDate: newOrder.date,
-                status: 'Due' as const,
-                transactions: [
-                  {
-                    id: `tx-${Date.now()}`,
-                    date: newOrder.date,
-                    type: 'Purchase' as const,
-                    amount: newOrder.totalAmount,
-                    notes: `Order #${newOrder.orderNumber} via Khata Credit`,
-                    orderNumber: newOrder.orderNumber,
-                  },
-                  ...k.transactions,
-                ],
-              };
-            }
-            return k;
-          });
-        }
-        return prev;
-      });
-    }
 
     if (itemsToOrder === cart) {
       clearCart();
@@ -415,108 +445,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void fetchKhata();
   };
 
-  /** Offline/demo path used only when the API or database is unavailable. */
-  const buildLocalOrder = (
-    itemsToOrder: CartItem[],
-    shippingAddress: ShippingAddress,
-    paymentMethod: Order['paymentMethod'],
-    deliveryType: Order['deliveryType']
-  ): Order => {
-    const subtotal = itemsToOrder.reduce((acc, item) => acc + item.price * item.quantity, 0);
-    const discount = subtotal > 5000 ? Math.round(subtotal * 0.05) : 0;
-    const deliveryCharge = deliveryType === 'Express Tractor Express' ? 250 : 0;
-    const taxBase = Math.max(0, subtotal - discount);
-    const tax = Math.round(taxBase * 0.05 * 100) / 100;
-    const totalAmount = Math.round((taxBase + deliveryCharge + tax) * 100) / 100;
 
-    return {
-      id: `ord-${Date.now()}`,
-      orderNumber: `ORD-2026-${Math.floor(1000 + Math.random() * 9000)}`,
-      date: new Date().toISOString().split('T')[0],
-      customerName: shippingAddress.fullName,
-      customerPhone: shippingAddress.phone,
-      customerVillage: `${shippingAddress.villageTown}, ${shippingAddress.talukaDistrict}`,
-      items: itemsToOrder.map((item) => ({
-        productId: item.product.id,
-        productName: item.product.name,
-        brand: item.product.brand,
-        weightKg: item.weightKg,
-        // Frozen from the chosen variant so order history keeps the right label
-        // even if the product is re-packed later.
-        unit:
-          item.product.weightOptions.find((w) => w.weightKg === item.weightKg)?.unit ??
-          item.product.unit ??
-          'kg',
-        quantity: item.quantity,
-        unitPrice: item.price,
-        totalPrice: item.price * item.quantity,
-        image: item.product.image,
-      })),
-      subtotal,
-      discount,
-      deliveryCharge,
-      tax,
-      totalAmount,
-      paymentMethod,
-      paymentStatus: paymentMethod === 'Khata Credit' ? 'Khata Due' : paymentMethod === 'Cash on Delivery' ? 'Pending' : 'Paid',
-      status: 'Placed',
-      deliveryType,
-      shippingAddress,
-      estimatedDeliveryDate: 'Within 24-36 Hours',
-      trackingStepIndex: 1,
-      assignedDriver: {
-        name: 'Ramesh Sawant (Village Van Dispatch)',
-        phone: '+91 94211 88920',
-        vehicleNo: 'MH-09-EQ-4421',
-      },
-    };
-  };
-
-  const addKhataPayment = async (recordId: string, amount: number, notes: string) => {
+  const addKhataPayment = async (
+    recordId: string,
+    amount: number,
+    notes: string,
+    paymentMethod = 'Cash'
+  ): Promise<boolean> => {
     const id = Number(String(recordId).replace(/^kht-/, ''));
     if (!Number.isInteger(id) || id < 1) {
       addToast('Invalid Khata record.', 'error');
-      return;
+      return false;
     }
     try {
       const res = await fetch(`/api/khata/${id}/payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, notes }),
+        body: JSON.stringify({ amount, notes, paymentMethod }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { message?: string };
         addToast(body.message ?? 'Could not record the payment.', 'error');
-        return;
+        return false;
       }
       await fetchKhata();
       addToast(`Recorded ₹${amount} payment for Khata ledger!`, 'success');
+      return true;
     } catch {
       addToast('Could not record the payment. Please try again.', 'error');
+      return false;
     }
-  };
-
-  const addSubscription = (product: Product, weightKg: number, qty: number, freqDays: number) => {
-    const unitPrice = product.weightOptions.find((w) => w.weightKg === weightKg)?.price || product.price;
-    const newSub: Subscription = {
-      id: `sub-${Date.now()}`,
-      productName: product.name,
-      brand: product.brand,
-      weightKg,
-      quantity: qty,
-      frequencyDays: freqDays,
-      nextDeliveryDate: new Date(Date.now() + freqDays * 86400000).toISOString().split('T')[0],
-      status: 'Active',
-      deliveryAddress: 'Default Farm Address (Kagal Village)',
-      pricePerDelivery: unitPrice * qty,
-    };
-    setSubscriptions((prev) => [newSub, ...prev]);
-    addToast(`Subscribed to auto-delivery every ${freqDays} days!`, 'success');
-  };
-
-  const cancelSubscription = (subId: string) => {
-    setSubscriptions((prev) => prev.filter((s) => s.id !== subId));
-    addToast('Subscription cancelled', 'info');
   };
 
   const markNotificationAsRead = (id: string) => {
@@ -560,9 +518,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetchKhata,
         khataRecords,
         addKhataPayment,
-        subscriptions,
-        addSubscription,
-        cancelSubscription,
         notifications,
         markNotificationAsRead,
         unreadNotificationCount,

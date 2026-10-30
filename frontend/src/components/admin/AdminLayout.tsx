@@ -1,91 +1,56 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
+import { STORE } from '../../data/store';
 import type { AdminTab } from '../../types';
 import { AdminOverview } from './AdminOverview';
 import { SalesAnalytics } from './SalesAnalytics';
 import { InventoryManagement } from './InventoryManagement';
 import { POSCounter } from './POSCounter';
 import { KhataLedger } from './KhataLedger';
-import { CustomerCRM } from './CustomerCRM';
-import { SupplierManagement } from './SupplierManagement';
 import { DeliveryManagement } from './DeliveryManagement';
-import { OffersAndDiscounts } from './OffersAndDiscounts';
-import { AdminAccessPanel } from './AdminAccessPanel';
-import { ReportsGenerator } from './ReportsGenerator';
-import { SettingsPanel } from './SettingsPanel';
 import {
   LayoutDashboard,
   BarChart3,
   Package,
   Store,
   BookOpen,
-  Users,
-  Building2,
   Truck,
-  Ticket,
-  FileText,
-  Eye,
-  Settings,
   ChevronRight,
   type LucideIcon,
 } from 'lucide-react';
 
-/**
- * Tabs each role may open. Counter staff handle billing and stock at the shop
- * counter; the owner additionally sees revenue, credit, supplier and config
- * records. Both lists are enforced again on the matching API routes.
- */
-const STAFF_TABS: readonly AdminTab[] = ['overview', 'inventory', 'pos', 'delivery'];
+/** Tabs backed by live data. Anything without a matching API is not shown. */
 const ADMIN_TABS: readonly AdminTab[] = [
   'overview',
   'analytics',
   'inventory',
   'pos',
   'khata',
-  'crm',
-  'suppliers',
   'delivery',
-  'offers',
-  'reports',
-  'access',
-  'settings',
 ] as const;
+
+const MENU_ITEMS = [
+  { id: 'overview', labelKey: 'admin.navOverview' as const, icon: LayoutDashboard },
+  { id: 'analytics', labelKey: 'admin.navSales' as const, icon: BarChart3 },
+  { id: 'inventory', labelKey: 'admin.navInventory' as const, icon: Package },
+  { id: 'pos', labelKey: 'admin.navPos' as const, icon: Store },
+  { id: 'khata', labelKey: 'admin.navKhata' as const, icon: BookOpen },
+  { id: 'delivery', labelKey: 'admin.navDispatch' as const, icon: Truck },
+] satisfies { id: AdminTab; labelKey: string; icon: LucideIcon }[];
 
 export const AdminLayout: React.FC = () => {
   const { adminTab, setAdminTab } = useApp();
   const { user } = useAuth();
+  const { t } = useLanguage();
 
-  // One shop, one owner role: the counter-staff mode was removed. 'employee'
-  // is still accepted by the API as staff, but gets the full owner tab list.
-  const isOwner = user?.role === 'admin' || user?.role === 'employee';
-  const allowedTabs = ADMIN_TABS;
-
-  const ALL_MENU_ITEMS = [
-    { id: 'overview', label: 'Overview Dashboard', icon: LayoutDashboard },
-    { id: 'analytics', label: 'Sales & Revenue', icon: BarChart3 },
-    { id: 'inventory', label: 'Inventory & Batches', icon: Package },
-    { id: 'pos', label: 'POS Billing Counter', icon: Store },
-    { id: 'khata', label: 'Farmer Credit Khata', icon: BookOpen },
-    { id: 'crm', label: 'Farmer Directory', icon: Users },
-    { id: 'suppliers', label: 'Suppliers & POs', icon: Building2 },
-    { id: 'delivery', label: 'Village Freight Dispatch', icon: Truck },
-    { id: 'offers', label: 'Promotions & Coupons', icon: Ticket },
-    { id: 'reports', label: 'GST & Audit Reports', icon: FileText },
-    { id: 'access', label: 'Website Access', icon: Eye },
-    { id: 'settings', label: 'Store Settings', icon: Settings },
-  ] satisfies { id: AdminTab; label: string; icon: LucideIcon }[];
-
-  const menuItems = ALL_MENU_ITEMS.filter((item) => allowedTabs.includes(item.id));
-
-  // Staff should never be left staring at a tab their role cannot open.
   React.useEffect(() => {
-    if (!(allowedTabs as readonly string[]).includes(adminTab)) {
+    if (!(ADMIN_TABS as readonly string[]).includes(adminTab)) {
       setAdminTab('overview');
     }
-  }, [adminTab, allowedTabs, setAdminTab]);
+  }, [adminTab, setAdminTab]);
 
-  const roleLabel = 'Shop Owner';
   const initials = (user?.name ?? '?')
     .split(' ')
     .filter(Boolean)
@@ -94,79 +59,74 @@ export const AdminLayout: React.FC = () => {
     .join('');
 
   return (
-    <div className="bg-[#fafaf9] min-h-screen py-6 sm:py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* SaaS Sidebar Navigation (3 Cols) - High Density Theme */}
-          <aside className="lg:col-span-3 bg-[#064e3b] text-white rounded-2xl border border-[#065f46] shadow-md overflow-hidden sticky top-24">
-            <div className="p-4 flex items-center gap-3 border-b border-[#065f46]">
-              <div className="w-8 h-8 bg-[#10b981] rounded-lg flex items-center justify-center font-bold text-white text-sm shrink-0">
-                A
+    <div className="min-h-screen bg-cream py-6 sm:py-8">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
+          <aside className="sticky top-24 overflow-hidden rounded-2xl border border-line bg-paper shadow-sm lg:col-span-3">
+            <div className="flex items-center gap-3 border-b border-line p-4">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-pine text-sm font-bold text-cream">
+                H
               </div>
-              <div>
-                <span className="text-sm font-bold tracking-tight block">AgroFeed Pro</span>
-                <span className="text-[10px] text-[#34d399] uppercase font-semibold tracking-wider">
-                  SaaS Control
+              <div className="min-w-0">
+                <span className="block truncate text-sm font-bold tracking-tight text-ink">
+                  {STORE.name}
+                </span>
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-pine">
+                  {STORE.region}
                 </span>
               </div>
             </div>
 
-            <div className="px-4 text-[10px] uppercase tracking-wider text-[#34d399] font-semibold pt-4 pb-1">
-              Management
+            <div className="px-4 pb-1 pt-4 text-[10px] font-semibold uppercase tracking-wider text-ink-soft">
+              {t('admin.sectionLabel')}
             </div>
 
-            <nav className="py-1 space-y-0.5">
-              {menuItems.map((item) => {
+            <nav className="space-y-0.5 py-1">
+              {MENU_ITEMS.map((item) => {
                 const Icon = item.icon;
                 const isActive = adminTab === item.id;
-
                 return (
                   <button
                     key={item.id}
                     onClick={() => setAdminTab(item.id)}
-                    className={`w-full flex items-center justify-between px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer ${
+                    className={`flex w-full cursor-pointer items-center justify-between px-4 py-2.5 text-xs font-semibold transition-colors ${
                       isActive
-                        ? 'bg-[#065f46] border-r-4 border-[#10b981] text-white font-bold'
-                        : 'text-[#a7f3d0] hover:bg-[#065f46] hover:text-white'
+                        ? 'border-r-4 border-pine bg-pine-soft text-ink'
+                        : 'text-ink-soft hover:bg-cream hover:text-ink'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-[#10b981]' : 'text-[#34d399]'}`} />
-                      <span>{item.label}</span>
-                    </div>
-                    {isActive && <ChevronRight className="w-3.5 h-3.5 text-[#10b981]" />}
+                    <span className="flex items-center gap-2.5">
+                      <Icon className={`h-4 w-4 ${isActive ? 'text-pine' : 'text-ink-soft'}`} />
+                      {t(item.labelKey)}
+                    </span>
+                    {isActive && <ChevronRight className="h-3.5 w-3.5 text-pine" />}
                   </button>
                 );
               })}
             </nav>
 
-            <div className="p-4 border-t border-[#065f46] mt-4">
-              <div className="flex items-center gap-3 p-2 bg-[#065f46] rounded-xl">
-                <div className="w-7 h-7 bg-[#10b981] rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">
+            <div className="mt-4 border-t border-line p-4">
+              <div className="flex items-center gap-3 rounded-xl bg-cream p-2">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-pine text-xs font-bold text-cream">
                   {initials}
                 </div>
-                <div className="flex-1 overflow-hidden">
-                  <div className="text-xs font-semibold truncate text-white">{user?.name}</div>
-                  <div className="text-[10px] text-[#34d399]">{roleLabel}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-semibold text-ink">{user?.name}</div>
+                  <div className="text-[10px] text-ink-soft">
+                    {user?.role === 'employee' ? t('admin.roleStaff') : t('admin.roleOwner')}
+                  </div>
                 </div>
               </div>
             </div>
           </aside>
 
-          {/* SaaS Content Tab Render (9 Cols) */}
           <div className="lg:col-span-9">
             {adminTab === 'overview' && <AdminOverview />}
             {adminTab === 'analytics' && <SalesAnalytics />}
             {adminTab === 'inventory' && <InventoryManagement />}
             {adminTab === 'pos' && <POSCounter />}
             {adminTab === 'khata' && <KhataLedger />}
-            {adminTab === 'crm' && <CustomerCRM />}
-            {adminTab === 'suppliers' && <SupplierManagement />}
             {adminTab === 'delivery' && <DeliveryManagement />}
-            {adminTab === 'offers' && <OffersAndDiscounts />}
-            {adminTab === 'reports' && <ReportsGenerator />}
-            {adminTab === 'access' && <AdminAccessPanel />}
-            {adminTab === 'settings' && <SettingsPanel />}
           </div>
         </div>
       </div>

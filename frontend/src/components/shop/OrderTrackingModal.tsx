@@ -1,21 +1,23 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { ProductImage } from '../common/ProductImage';
 import { formatVariantLabel } from '../../utils/variants';
-import { Truck, CheckCircle2, Phone, Printer, ArrowLeft } from 'lucide-react';
+import { STORE } from '../../data/store';
+import { printBill } from '../../utils/printBill';
+import { Truck, CheckCircle2, Phone, Printer, ArrowLeft, MessageCircle } from 'lucide-react';
 
 export const OrderTrackingModal: React.FC = () => {
   const { activeOrderForTracking, setCurrentView } = useApp();
+  const { t } = useLanguage();
 
   if (!activeOrderForTracking) {
     return (
-      <div className="bg-slate-50 min-h-screen py-16 text-center">
-        <h2 className="text-xl font-bold text-slate-800">No Active Order Selected</h2>
-        <button
-          onClick={() => setCurrentView('home')}
-          className="mt-4 bg-emerald-800 text-white font-bold text-xs px-5 py-2.5 rounded-xl"
-        >
-          Return to Home
+      <div className="min-h-screen bg-cream py-16 text-center">
+        <h1 className="text-xl text-ink">{t('tracking.emptyTitle')}</h1>
+        <p className="mt-1 text-xs text-ink-soft">{t('tracking.emptyBody')}</p>
+        <button onClick={() => setCurrentView('customer-dashboard')} className="btn btn-primary mt-4">
+          {t('tracking.emptyCta')}
         </button>
       </div>
     );
@@ -24,148 +26,175 @@ export const OrderTrackingModal: React.FC = () => {
   const order = activeOrderForTracking;
 
   const steps = [
-    { label: 'Order Placed', desc: 'Received at Shop System' },
-    { label: 'Confirmed', desc: 'Khata / Payment Approved' },
-    { label: 'Packed & Weighed', desc: 'Feed Bags Prepared' },
-    { label: 'Shipped', desc: 'Loaded on Dispatch Freight' },
-    { label: 'Out for Village Delivery', desc: 'Driver en route to Barn' },
-    { label: 'Delivered', desc: 'Handed to Farmer' },
+    { label: t('tracking.stepPlaced'), desc: '' },
+    { label: t('tracking.stepConfirmed'), desc: '' },
+    { label: t('tracking.stepPacked'), desc: '' },
+    { label: t('tracking.stepShipped'), desc: '' },
+    { label: t('tracking.stepOut'), desc: '' },
+    { label: t('tracking.stepDelivered'), desc: '' },
   ];
 
+  const shareBill = () => {
+    if (order.paymentStatus !== 'Paid') {
+      window.alert(t('tracking.billAlert'));
+      return;
+    }
+    const lines = order.items
+      .map((item) => `• ${item.productName} (${item.weightKg}kg x${item.quantity}) — ₹${item.totalPrice.toLocaleString('en-IN')}`)
+      .join('\n');
+    const text =
+      `${STORE.name} bill — Order #${order.orderNumber}\n` +
+      `${lines}\n` +
+      `Subtotal: ₹${order.subtotal.toLocaleString('en-IN')} | Discount: ₹${order.discount} | GST: ₹${order.tax} | Delivery: ₹${order.deliveryCharge}\n` +
+      `Total: ₹${order.totalAmount.toLocaleString('en-IN')}\n` +
+      `Payment: ${order.paymentMethod} (${order.paymentStatus})`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <div className="bg-slate-50 min-h-screen py-10">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
+    <div className="min-h-screen bg-cream py-10">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 sm:px-6 lg:px-8">
         <button
           onClick={() => setCurrentView('customer-dashboard')}
-          className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+          className="flex items-center gap-1 text-xs font-bold text-ink-soft hover:text-ink"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Back to My Customer Orders</span>
+          <ArrowLeft className="h-4 w-4" />
+          {t('tracking.backLink')}
         </button>
 
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-6 border-b border-slate-100 gap-4">
+        <section className="card print-area space-y-6 p-6 sm:p-8">
+          <div className="flex flex-col justify-between gap-4 border-b border-line pb-6 sm:flex-row sm:items-center">
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-emerald-800 bg-emerald-100 px-2.5 py-0.5 rounded-md">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-pine-soft px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-pine">
                   {order.status}
                 </span>
-                <span className="text-xs text-slate-400">Order #{order.orderNumber}</span>
+                <span className="text-[11px] text-ink-soft">#{order.orderNumber}</span>
               </div>
-              <h1 className="text-2xl font-black text-slate-900 mt-1">Order Dispatch Tracking</h1>
-              <p className="text-xs text-slate-500 mt-0.5">Estimated Barn Arrival: {order.estimatedDeliveryDate}</p>
+              <h1 className="mt-1 text-2xl text-ink">{t('tracking.title')}</h1>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                {t('tracking.expectedDelivery', { date: order.estimatedDeliveryDate })}
+              </p>
             </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => {
-                  if (order.paymentStatus !== 'Paid') {
-                    // The bill does not exist until the owner confirms payment.
-                    alert('Bill will be generated once the shop owner confirms your payment.');
-                    return;
-                  }
-                  const lines = order.items
-                    .map((i) => `• ${i.productName} (${i.weightKg}kg x${i.quantity}) — ₹${i.totalPrice.toLocaleString('en-IN')}`)
-                    .join('\n');
-                  const text =
-                    `PashuFeed Pro bill — Order #${order.orderNumber}\n` +
-                    `${lines}\n` +
-                    `Subtotal: ₹${order.subtotal.toLocaleString('en-IN')} | Discount: ₹${order.discount} | GST: ₹${order.tax} | Delivery: ₹${order.deliveryCharge}\n` +
-                    `Total: ₹${order.totalAmount.toLocaleString('en-IN')}\n` +
-                    `Payment: ${order.paymentMethod} (${order.paymentStatus})`;
-                  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
-                }}
-                className="flex items-center gap-1.5 bg-[#25D366] hover:bg-[#1ebe5d] text-white font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
-              >
-                <span>Send Bill on WhatsApp</span>
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={shareBill} className="btn btn-outline !px-3 !py-2 text-xs">
+                <MessageCircle className="h-3.5 w-3.5" />
+                {t('tracking.sendBill')}
               </button>
-
-              <button
-                onClick={() => window.print()}
-                className="flex items-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl cursor-pointer"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print Thermal Invoice</span>
+              <button onClick={() => printBill()} className="btn btn-outline !px-3 !py-2 text-xs">
+                <Printer className="h-3.5 w-3.5" />
+                {t('tracking.printInvoice')}
               </button>
             </div>
           </div>
 
-          {/* Interactive Delivery Timeline */}
-          <div className="py-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-6">Delivery Progress Timeline</h3>
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 relative">
-              {steps.map((st, idx) => {
-                const stepNum = idx + 1;
-                const isDone = stepNum <= order.trackingStepIndex;
-
+          <div>
+            <h2 className="mb-5 text-[11px] font-bold uppercase tracking-[0.16em] text-ink-soft">
+              {t('tracking.progressTitle')}
+            </h2>
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
+              {steps.map((step, index) => {
+                const stepNumber = index + 1;
+                const done = stepNumber <= order.trackingStepIndex;
                 return (
-                  <div key={idx} className="flex flex-col items-center text-center space-y-2">
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shadow-xs transition-colors ${
-                        isDone ? 'bg-emerald-800 text-white' : 'bg-slate-100 text-slate-400 border border-slate-200'
+                  <div key={step.label} className="flex flex-col items-center text-center">
+                    <span
+                      className={`flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold ${
+                        done ? 'bg-pine text-cream' : 'border border-line bg-cream text-ink-soft'
                       }`}
                     >
-                      {isDone ? <CheckCircle2 className="w-5 h-5" /> : stepNum}
-                    </div>
-                    <div>
-                      <div className={`text-xs font-bold ${isDone ? 'text-slate-900' : 'text-slate-400'}`}>
-                        {st.label}
-                      </div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{st.desc}</div>
-                    </div>
+                      {done ? <CheckCircle2 className="h-5 w-5" /> : stepNumber}
+                    </span>
+                    <p className={`mt-2 text-[11px] font-bold ${done ? 'text-ink' : 'text-ink-soft'}`}>
+                      {step.label}
+                    </p>
+                    <p className="mt-0.5 text-[10px] leading-snug text-ink-soft">{step.desc}</p>
                   </div>
                 );
               })}
             </div>
           </div>
 
-          {/* Driver Contact Box */}
           {order.assignedDriver && (
-            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div className="flex flex-col justify-between gap-4 rounded-2xl border border-pine/20 bg-pine-soft p-4 sm:flex-row sm:items-center">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-emerald-800 text-amber-300 font-bold flex items-center justify-center shrink-0">
-                  <Truck className="w-5 h-5" />
-                </div>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-pine text-cream">
+                  <Truck className="h-5 w-5" />
+                </span>
                 <div>
-                  <div className="text-xs font-bold text-slate-900">Assigned Delivery Driver</div>
-                  <div className="text-xs text-slate-600">
-                    {order.assignedDriver.name} | Vehicle: {order.assignedDriver.vehicleNo}
-                  </div>
+                  <p className="text-xs font-bold text-ink">{t('tracking.deliveryContact')}</p>
+                  <p className="text-xs text-ink-soft">
+                    {order.assignedDriver.name} · {order.assignedDriver.vehicleNo}
+                  </p>
                 </div>
               </div>
 
-              <a
-                href={`tel:${order.assignedDriver.phone}`}
-                className="bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold px-4 py-2 rounded-xl flex items-center gap-2 cursor-pointer"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                <span>Call Driver ({order.assignedDriver.phone})</span>
+              <a href={`tel:${order.assignedDriver.phone}`} className="btn btn-primary !px-4 !py-2 text-xs">
+                <Phone className="h-3.5 w-3.5" />
+                {t('tracking.callPhone', { phone: order.assignedDriver.phone })}
               </a>
             </div>
           )}
 
-          {/* Order Items Table */}
           <div>
-            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">Order Items</h3>
-            <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl overflow-hidden">
-              {order.items.map((item, idx) => (
-                <div key={idx} className="p-3.5 flex items-center justify-between gap-4 text-xs">
+            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-[0.16em] text-ink-soft">
+              {t('tracking.itemsTitle')}
+            </h2>
+            <div className="overflow-hidden rounded-2xl border border-line">
+              {order.items.map((item, index) => (
+                <div
+                  key={`${item.productId}-${item.weightKg}-${index}`}
+                  className="flex items-center justify-between gap-4 border-b border-line p-3.5 text-xs last:border-b-0"
+                >
                   <div className="flex items-center gap-3">
-                    <ProductImage src={item.image} alt={item.productName} width={48} height={48} className="w-12 h-12 object-cover rounded-xl" />
+                    <ProductImage
+                      src={item.image}
+                      alt={item.productName}
+                      width={48}
+                      height={48}
+                      className="h-12 w-12 rounded-xl object-cover"
+                    />
                     <div>
-                      <div className="font-bold text-slate-900">{item.productName}</div>
-                      <div className="text-slate-500">
+                      <p className="font-bold text-ink">{item.productName}</p>
+                      <p className="text-ink-soft">
                         {formatVariantLabel(item.weightKg, item.unit ?? 'kg')} × {item.quantity}
-                      </div>
+                      </p>
                     </div>
                   </div>
-                  <div className="font-black text-slate-900">₹{item.totalPrice.toLocaleString('en-IN')}</div>
+                  <p className="font-bold text-ink">₹{item.totalPrice.toLocaleString('en-IN')}</p>
                 </div>
               ))}
             </div>
           </div>
-        </div>
+
+          <div className="space-y-1.5 border-t border-line pt-4 text-xs text-ink-soft">
+            <div className="flex justify-between">
+              <span>{t('tracking.subtotal')}</span>
+              <span className="font-semibold text-ink">₹{order.subtotal.toLocaleString('en-IN')}</span>
+            </div>
+            {order.discount > 0 && (
+              <div className="flex justify-between">
+                <span>{t('tracking.bulkDiscount')}</span>
+                <span className="font-semibold text-pine">− ₹{order.discount.toLocaleString('en-IN')}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span>{t('tracking.gst')}</span>
+              <span className="font-semibold text-ink">₹{order.tax.toLocaleString('en-IN')}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>{t('tracking.delivery')}</span>
+              <span className="font-semibold text-ink">
+                {order.deliveryCharge === 0 ? t('tracking.free') : `₹${order.deliveryCharge}`}
+              </span>
+            </div>
+            <div className="flex justify-between border-t border-line pt-2 text-sm font-bold text-ink">
+              <span>{t('tracking.totalLabel', { method: order.paymentMethod, status: order.paymentStatus })}</span>
+              <span className="font-display text-lg">₹{order.totalAmount.toLocaleString('en-IN')}</span>
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
-import { Sparkles, X, Send, Stethoscope, HeartPulse, GripVertical } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
+import { X, Send, HeartPulse, GripVertical } from 'lucide-react';
 import type { MainView } from '../../types';
 
 interface ChatMessage {
@@ -16,52 +17,52 @@ interface ChatApiReply {
 }
 
 /**
- * Canned answers used only when the Gemini backend is unreachable, so the widget
- * stays demonstrable without an API key. Surfaced to the user as "demo mode".
- * These mimic a veterinary doctor's responses.
+ * General dairy husbandry tips shown only when the Gemini backend is
+ * unreachable, so the widget stays demonstrable without an API key. Surfaced
+ * to the user as demo mode — not presented as a licensed veterinarian.
  */
 const DEMO_REPLIES: { match: RegExp; text: string; actionBtn?: ChatMessage['actionBtn'] }[] = [
   {
     match: /^(hi|hello|hey|namaste|good morning|good evening|good afternoon)/i,
-    text: 'Namaste! I am Dr. Pashu, your veterinary & dairy nutrition advisor. How can I help with your cattle health or feed today?',
+    text: 'Namaste! I am the PashuFeed assistant. Ask about feed, rations, or general dairy husbandry. For medical diagnosis, please consult a local veterinarian.',
   },
   {
     match: /who (am i|are you)/i,
-    text: 'I am Dr. Pashu, a licensed veterinary and dairy-nutrition doctor for Indian dairy farmers. You are a valued farmer using PashuFeed Pro. How can I assist with your herd today?',
+    text: 'I am the PashuFeed feed & husbandry assistant. I can help with ration planning, product questions, and khata/order guidance. I am not a substitute for a veterinarian.',
   },
   {
     match: /fat|snf/i,
-    text: 'Dr. Advice: To push milk fat percentage above 4.5%, feed bypass fat at 100-150 g/day alongside your high-protein pellet. Bypass fat passes the rumen intact, so more of it reaches the udder for fat synthesis.',
-    actionBtn: { label: 'Open Ration Calculator', view: 'nutrition-quiz' },
+    text: 'To support milk fat percentage, many farmers add bypass fat at roughly 100–150 g/day alongside a high-protein concentrate. Fat test is also affected by breed, stage of lactation and forage quality. The ration calculator can size a bundle for your herd.',
+    actionBtn: { label: 'Open ration calculator', view: 'nutrition-quiz' },
   },
   {
     match: /calf/i,
-    text: 'Dr. Advice: Calf starter feed at 24% crude protein speeds up rumen papillae development. Introduce it from 15 days of age to hit roughly 500 g of daily weight gain through weaning.',
+    text: 'A 24% protein calf starter from about 15 days of age supports rumen development. Introduce concentrate gradually alongside milk; keep water and dry feed available at all times.',
   },
   {
     match: /khata|credit/i,
-    text: 'Dr. Advice: The Farmer Credit Khata lets registered dairy farmers buy feed on credit, settled automatically against milk-collection union payouts. Open your dashboard to see outstanding balances.',
-    actionBtn: { label: 'View Khata Ledger', view: 'customer-dashboard' },
+    text: 'The khata (credit) ledger tracks feed bought on store credit. Open your dashboard to see outstanding balances and payment history.',
+    actionBtn: { label: 'View khata ledger', view: 'customer-dashboard' },
   },
   {
     match: /vomit|vomited|vomiting|diarrhea|scours|loose motion|not eating|off feed|fever|lameness|limp|bloat|choking|milk fever|downer|mastitis|swollen udder/i,
-    text: 'Dr. Advice: This sounds concerning. For vomiting/off-feed: check for bloat, acidosis, or hardware disease. For diarrhea in adults: could be parasites, Johne\'s, or sudden diet change. For calves with scours: electrolytes immediately. For mastitis: strip quarter, apply teat dip, consider intramammary tube. For bloat: emergency - call local vet now. For milk fever/downer cow: calcium borogluconate IV immediately. Always confirm with a local veterinarian for exact diagnosis and drug doses.',
+    text: 'These symptoms need a hands-on check. Note species, age, how long signs have been present, and body temperature if you can. For scours in calves, start electrolytes early. For downer cows or severe bloat, call your local veterinarian immediately — do not wait.',
   },
   {
     match: /pregnant|pregnancy|heat|ai|artificial insemination|breeding|repeat breeder/i,
-    text: 'Dr. Advice: For repeat breeders: check body condition score (target 3.0-3.5), ensure proper mineral mix with selenium, zinc, copper. Time AI at 12-18h after standing heat. Consider GnRH at AI. For pregnancy diagnosis: rectal palpation at 35-45 days or ultrasound at 28-32 days. Feed transition diet 3 weeks pre-calving with anionic salts to prevent milk fever.',
+    text: 'Breeding decisions depend on body condition, health records and timing. Keep BCS around 3.0–3.5 at service, and work with your AI technician on heat detection windows. Pregnancy diagnosis should be done by a veterinarian.',
   },
   {
     match: /deworm|worm|parasite|lice|tick|fly/i,
-    text: 'Dr. Advice: Deworm adults 2-3 times yearly (pre-monsoon, post-monsoon, pre-winter). Use fenbendazole or albendazole for roundworms, closantel for liver fluke. Calves: first deworming at 2-3 weeks, repeat at 6 weeks. Rotate drug classes to prevent resistance. For ectoparasites: deltamethrin pour-on or amitraz dip every 21 days in peak season.',
+    text: 'Deworming schedules vary by region and fodder system — many farms deworm 2–3 times a year. Rotate dewormer classes to reduce resistance, and treat ectoparasites with a vet-recommended pour-on or dip in peak season.',
   },
   {
     match: /weather|temperature|rain|humidity/i,
-    text: 'Dr. Advice: Hot weather reduces dry matter intake and milk yield. Ensure shade, fans, sprinklers, and clean water. Feed early morning and late evening. Add electrolytes and buffers (sodium bicarbonate 150g/day). Monsoon: watch for foot rot, mastitis spikes, and aflatoxin in wet feed. Keep feed dry and off ground.',
+    text: 'In hot weather, dry matter intake and milk yield often drop. Provide shade, fans or sprinklers, and plenty of clean water; feed in early morning and late evening. In monsoon, keep feed dry and off the ground to limit fungal growth.',
   },
   {
     match: /.*/,
-    text: 'Dr. Advice: For steady milk yield without risking rumen acidosis, hold a 60:40 forage-to-concentrate ratio and supplement with ionic calcium and bypass fat. For any specific health concern, describe the symptoms clearly - species, age, duration, temperature if known - and I will guide you on likely causes and first steps.',
+    text: 'For a simple starting point, aim for a 60:40 forage-to-concentrate ratio and balance protein to yield. Describe your animal type, daily yield, and stage of lactation and I can point you to a suitable feed bundle.',
   },
 ];
 
@@ -70,34 +71,66 @@ function getDemoReply(question: string): ChatApiReply {
   return { text: hit?.text ?? '', actionBtn: hit?.actionBtn };
 }
 
+const CowAvatar: React.FC<{ className?: string }> = ({ className = '' }) => (
+  <div className={`flex items-center justify-center overflow-hidden rounded-full bg-pine ${className}`}>
+    <svg viewBox="0 0 100 100" className="h-full w-full">
+      <circle cx="50" cy="50" r="48" fill="#1f4d3a" />
+      <path d="M 22 25 L 12 10 L 32 20 Z" fill="#c8842a" />
+      <path d="M 78 25 L 88 10 L 68 20 Z" fill="#c8842a" />
+      <path d="M 18 35 C 10 30 10 45 22 40 Z" fill="#b4552d" />
+      <path d="M 82 35 C 90 30 90 45 78 40 Z" fill="#b4552d" />
+      <ellipse cx="50" cy="45" rx="28" ry="24" fill="#fffdf7" />
+      <ellipse cx="50" cy="55" rx="20" ry="14" fill="#f4e7cd" />
+      <circle cx="44" cy="55" r="2.5" fill="#b4552d" />
+      <circle cx="56" cy="55" r="2.5" fill="#b4552d" />
+      <circle cx="40" cy="42" r="3" fill="#1b2a22" />
+      <circle cx="60" cy="42" r="3" fill="#1b2a22" />
+      <path d="M 32 60 C 32 78 68 78 68 60" fill="none" stroke="#e3dac8" strokeWidth="4" strokeLinecap="round" />
+      <circle cx="50" cy="74" r="5" fill="#c8842a" stroke="#fffdf7" strokeWidth="1.5" />
+    </svg>
+  </div>
+);
+
 export const AIChatbotWidget: React.FC = () => {
-  const { setSelectedProduct, setCurrentView, products, khataRecords } = useApp();
+  const { setCurrentView, products, khataRecords } = useApp();
   const { user } = useAuth();
+  const { t, language } = useLanguage();
   const isStaff = user?.role === 'admin' || user?.role === 'employee';
 
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       sender: 'ai',
-      text: 'Namaste! I am Dr. Pashu AI, your veterinary & dairy nutrition advisor. How can I help with your cattle health or feed today?',
+      text: t('chat.greeting'),
     },
   ]);
   const [inputText, setInputText] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [isDemoMode, setIsDemoMode] = useState(false);
 
-  // Drag & Drop state
+  // Reset the conversation whenever the signed-in identity changes so one
+  // user's chat (including anything the AI said about their khata) never
+  // appears for the next user.
+  const userId = user?.id ?? null;
+  useEffect(() => {
+    setMessages([
+      {
+        sender: 'ai',
+        text: t('chat.greeting'),
+      },
+    ]);
+    setInputText('');
+    setIsThinking(false);
+    setIsDemoMode(false);
+  }, [userId, t]);
+
   const [position, setPosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ startX: number; startY: number; initX: number; initY: number; moved: boolean } | null>(null);
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    // Only drag with main mouse button or touch
     if (e.button !== undefined && e.button !== 0) return;
-    
-    // Capture pointer
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-
     dragStartRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -110,28 +143,22 @@ export const AIChatbotWidget: React.FC = () => {
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!dragStartRef.current || !isDragging) return;
-
     const deltaX = e.clientX - dragStartRef.current.startX;
     const deltaY = e.clientY - dragStartRef.current.startY;
-
     if (Math.hypot(deltaX, deltaY) > 5) {
       dragStartRef.current.moved = true;
     }
-
     setPosition({
       x: dragStartRef.current.initX + deltaX,
       y: dragStartRef.current.initY + deltaY,
     });
   };
 
-  const handlePointerUp = (e: React.PointerEvent) => {
+  const handlePointerUp = () => {
     if (!dragStartRef.current) return;
-    
     const wasMoved = dragStartRef.current.moved;
     dragStartRef.current = null;
     setIsDragging(false);
-
-    // If it was just a tap/click without drag motion, toggle open
     if (!wasMoved) {
       setIsOpen((prev) => !prev);
     }
@@ -139,14 +166,14 @@ export const AIChatbotWidget: React.FC = () => {
 
   const quickQuestions = isStaff
     ? [
-        'Which products are low in stock?',
-        'How do I collect pending Khata credit?',
-        'Suggest 3 offers to move slow-selling feed',
+        t('chat.chipLowStock'),
+        t('chat.chipKhataCollect'),
+        t('chat.chipOffers'),
       ]
     : [
-        'Which feed boosts milk fat test?',
-        'Calf nutrition guidance',
-        'What is today\'s weather like?',
+        t('chat.chipFat'),
+        t('chat.chipCalf'),
+        t('chat.chipWeather'),
       ];
 
   const handleSend = async (textToSend?: string) => {
@@ -167,6 +194,7 @@ export const AIChatbotWidget: React.FC = () => {
           history: messages,
           role: user?.role ?? 'guest',
           userName: user?.name,
+          language,
           products: products.map((p) => ({
             name: p.name,
             brand: p.brand,
@@ -185,7 +213,7 @@ export const AIChatbotWidget: React.FC = () => {
         if (res.status === 401 || detail?.error === 'SIGN_IN_REQUIRED') {
           setMessages((prev) => [
             ...prev,
-            { sender: 'ai', text: 'Please sign in to chat with Dr. Pashu AI. The advisor is for our registered customers and staff only.' },
+            { sender: 'ai', text: t('chat.signInNotice') },
           ]);
           setIsThinking(false);
           return;
@@ -211,7 +239,7 @@ export const AIChatbotWidget: React.FC = () => {
           sender: 'ai',
           text: offline
             ? demo.text
-            : `Dr. Advice: Connection issue. Let me help based on general veterinary knowledge. ${demo.text}`,
+            : `Connection issue — here is general guidance instead. ${demo.text}`,
           actionBtn: demo.actionBtn,
         },
       ]);
@@ -222,184 +250,95 @@ export const AIChatbotWidget: React.FC = () => {
 
   return (
     <div
-      className="fixed bottom-6 right-6 z-50 touch-none select-none"
+      className="no-print fixed bottom-6 right-6 z-50 touch-none select-none"
       style={{
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
         transition: isDragging ? 'none' : 'transform 0.1s ease-out',
       }}
     >
-      {/* Floating Trigger Button with Doctor Logo (Draggable anywhere on screen) */}
       {!isOpen && (
         <div
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
-          className={`bg-[#064e3b] hover:bg-[#065f46] text-white p-2.5 pr-5 rounded-full shadow-2xl flex items-center gap-2.5 transition-all cursor-grab active:cursor-grabbing border-2 border-[#10b981] group relative ${
-            isDragging ? 'scale-105 shadow-emerald-900/50' : 'hover:scale-105'
+          className={`group relative flex cursor-grab items-center gap-2.5 rounded-full border-2 border-pine/20 bg-paper p-2.5 pr-5 shadow-lg transition-all active:cursor-grabbing ${
+            isDragging ? 'scale-105' : 'hover:scale-105'
           }`}
         >
-          {/* Drag Handle Indicator */}
-          <div className="text-emerald-400/70 group-hover:text-emerald-300 pl-1">
-            <GripVertical className="w-4 h-4" />
+          <div className="pl-1 text-ink-soft">
+            <GripVertical className="h-4 w-4" />
           </div>
-
-          <div className="relative w-11 h-11 rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-emerald-400 p-0.5 shadow-lg shrink-0 flex items-center justify-center animate-bounce-slow">
-            <div className="w-full h-full bg-slate-900 rounded-full overflow-hidden flex items-center justify-center relative">
-              <svg viewBox="0 0 100 100" className="w-full h-full">
-                <circle cx="50" cy="50" r="48" fill="#065f46" />
-                {/* Cow Horns & Ears */}
-                <path d="M 22 25 L 12 10 L 32 20 Z" fill="#f59e0b" />
-                <path d="M 78 25 L 88 10 L 68 20 Z" fill="#f59e0b" />
-                <path d="M 18 35 C 10 30 10 45 22 40 Z" fill="#f43f5e" />
-                <path d="M 82 35 C 90 30 90 45 78 40 Z" fill="#f43f5e" />
-                {/* Cow Head */}
-                <ellipse cx="50" cy="45" rx="28" ry="24" fill="#ffffff" />
-                <ellipse cx="50" cy="55" rx="20" ry="14" fill="#fbcfe8" />
-                {/* Snout Nostrils */}
-                <circle cx="44" cy="55" r="2.5" fill="#be185d" />
-                <circle cx="56" cy="55" r="2.5" fill="#be185d" />
-                {/* Funky Sunglasses */}
-                <path d="M 28 36 L 48 36 L 46 48 L 30 48 Z" fill="#0f172a" />
-                <path d="M 52 36 L 72 36 L 70 48 L 54 48 Z" fill="#0f172a" />
-                <line x1="48" y1="40" x2="52" y2="40" stroke="#0f172a" strokeWidth="3" />
-                {/* Sunglass Lens Reflection */}
-                <line x1="32" y1="38" x2="42" y2="46" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" />
-                <line x1="56" y1="38" x2="66" y2="46" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" />
-                {/* Doctor Stethoscope */}
-                <path d="M 32 60 C 32 78 68 78 68 60" fill="none" stroke="#e2e8f0" strokeWidth="4" strokeLinecap="round" />
-                <circle cx="50" cy="74" r="5" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
-              </svg>
+          <CowAvatar className="h-11 w-11 shrink-0 border border-line" />
+          <div className="hidden text-left sm:block">
+            <div className="flex items-center gap-1 text-xs font-bold text-ink">
+              <span>PashuFeed assistant</span>
             </div>
-            <div className="absolute -bottom-1 -right-1 bg-amber-400 text-slate-950 text-[11px] font-black p-0.5 rounded-full border border-white shadow-xs">
-              😎
-            </div>
-          </div>
-          <div className="text-left hidden sm:block">
-            <div className="text-xs font-black text-white flex items-center gap-1">
-              <span>Dr. Pashu AI</span>
-              <Sparkles className="w-3 h-3 text-amber-300 animate-pulse" />
-            </div>
-            <div className="text-[10px] text-[#34d399] font-medium">Drag anywhere • Vet Doctor</div>
+            <div className="text-[10px] text-ink-soft">Drag anywhere · feed & husbandry help</div>
           </div>
         </div>
       )}
 
-      {/* Floating Chat Modal */}
       {isOpen && (
-        <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-80 sm:w-96 max-h-[520px] flex flex-col justify-between overflow-hidden animate-in zoom-in-95 duration-200">
-          {/* Doctor Header (also Draggable) */}
+        <div className="flex max-h-[520px] w-80 flex-col justify-between overflow-hidden rounded-2xl border border-line bg-paper shadow-xl sm:w-96">
           <div
             onPointerDown={handlePointerDown}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
-            className="bg-[#064e3b] text-white p-3.5 flex items-center justify-between border-b border-[#065f46] cursor-grab active:cursor-grabbing select-none"
+            className="flex cursor-grab select-none items-center justify-between border-b border-pine-deep/40 bg-pine p-3.5 text-white active:cursor-grabbing"
           >
             <div className="flex items-center gap-2.5">
-              <GripVertical className="w-4 h-4 text-emerald-400/80 shrink-0" />
-              <div className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-emerald-400 p-0.5 shadow-md shrink-0 flex items-center justify-center">
-                <div className="w-full h-full bg-slate-900 rounded-full overflow-hidden flex items-center justify-center relative">
-                  <svg viewBox="0 0 100 100" className="w-full h-full">
-                    <circle cx="50" cy="50" r="48" fill="#065f46" />
-                    <path d="M 22 25 L 12 10 L 32 20 Z" fill="#f59e0b" />
-                    <path d="M 78 25 L 88 10 L 68 20 Z" fill="#f59e0b" />
-                    <path d="M 18 35 C 10 30 10 45 22 40 Z" fill="#f43f5e" />
-                    <path d="M 78 35 C 90 30 90 45 78 40 Z" fill="#f43f5e" />
-                    <ellipse cx="50" cy="45" rx="28" ry="24" fill="#ffffff" />
-                    <ellipse cx="50" cy="55" rx="20" ry="14" fill="#fbcfe8" />
-                    <circle cx="44" cy="55" r="2.5" fill="#be185d" />
-                    <circle cx="56" cy="55" r="2.5" fill="#be185d" />
-                    <path d="M 28 36 L 48 36 L 46 48 L 30 48 Z" fill="#0f172a" />
-                    <path d="M 52 36 L 72 36 L 70 48 L 54 48 Z" fill="#0f172a" />
-                    <line x1="48" y1="40" x2="52" y2="40" stroke="#0f172a" strokeWidth="3" />
-                    <line x1="32" y1="38" x2="42" y2="46" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" />
-                    <line x1="56" y1="38" x2="66" y2="46" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" />
-                    <path d="M 32 60 C 32 78 68 78 68 60" fill="none" stroke="#e2e8f0" strokeWidth="4" strokeLinecap="round" />
-                    <circle cx="50" cy="74" r="5" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
-                  </svg>
-                </div>
-                <div className="absolute -bottom-0.5 -right-0.5 bg-amber-400 text-slate-950 text-[9px] font-bold p-0.2 rounded-full border border-white">
-                  😎
-                </div>
-              </div>
+              <GripVertical className="h-4 w-4 shrink-0 text-white/60" />
+              <CowAvatar className="h-10 w-10 shrink-0 border border-white/20" />
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="font-bold text-xs text-white">Dr. Pashu AI (DVM)</h3>
-                  <span className="bg-emerald-500/30 text-[#a7f3d0] text-[9px] font-extrabold px-1.5 py-0.2 rounded border border-emerald-400/40">
-                    VET DOCTOR
+                  <h3 className="text-xs font-bold">PashuFeed assistant</h3>
+                  <span className="rounded border border-white/25 bg-white/10 px-1.5 py-0.2 text-[9px] font-extrabold text-white/85">
+                    AI
                   </span>
                 </div>
-                <span className="text-[10px] text-[#34d399] flex items-center gap-1 mt-0.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                  Online | Drag header to move
+                <span className="mt-0.5 flex items-center gap-1 text-[10px] text-white/80">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-ochre" />
+                  {isDemoMode ? 'Demo tips mode' : 'Live assistant'} · drag header to move
                 </span>
               </div>
             </div>
-
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setIsOpen(false);
               }}
-              className="text-slate-300 hover:text-white cursor-pointer p-1"
+              className="cursor-pointer p-1 text-white/80 transition-colors hover:text-white"
             >
-              <X className="w-5 h-5" />
+              <X className="h-5 w-5" />
             </button>
           </div>
 
-          {/* Consultation Banner */}
-          <div className="bg-emerald-50 border-b border-emerald-100 px-3.5 py-1.5 flex items-center justify-between text-[10px] text-emerald-900 font-medium select-none">
+          <div className="flex items-center justify-between border-b border-line bg-pine-soft px-3.5 py-1.5 text-[10px] text-ink select-none">
             <span className="flex items-center gap-1 font-semibold">
-              <HeartPulse className="w-3.5 h-3.5 text-emerald-700" />
-              Free Tele-Consultation Active
+              <HeartPulse className="h-3.5 w-3.5 text-pine" />
+              Feed & husbandry guidance
             </span>
-            <span className="text-emerald-700 font-bold bg-emerald-100 px-1.5 py-0.5 rounded">
-              {isDemoMode ? 'Demo Mode' : 'Verified Vet AI'}
+            <span className="rounded bg-paper px-1.5 py-0.5 font-bold text-pine">
+              {isDemoMode ? 'Demo tips' : 'Live AI'}
             </span>
           </div>
 
           {isDemoMode && (
-            <div className="bg-amber-50 border-b border-amber-200 px-3.5 py-1.5 text-[10px] text-amber-900 leading-relaxed">
-              AI service unavailable, so these are canned answers. Add a GEMINI_API_KEY in .env and
-              start the API server for live replies.
+            <div className="border-b border-ochre/30 bg-ochre-soft px-3.5 py-1.5 text-[10px] leading-relaxed text-ink">
+              Live AI is unavailable — these are general tips shown for demonstration. Add a
+              GEMINI_API_KEY in .env and start the API server for live replies.
             </div>
           )}
 
-          {/* Messages Body */}
-          <div className="p-4 space-y-3 overflow-y-auto flex-1 text-xs select-text">
+          <div className="flex-1 space-y-3 overflow-y-auto p-4 text-xs select-text">
             {messages.map((m, idx) => (
-              <div
-                key={idx}
-                className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                {m.sender === 'ai' && (
-                  <div className="relative w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-emerald-400 p-0.5 shrink-0 shadow-xs flex items-center justify-center">
-                    <div className="w-full h-full bg-slate-900 rounded-full overflow-hidden flex items-center justify-center">
-                      <svg viewBox="0 0 100 100" className="w-full h-full">
-                        <circle cx="50" cy="50" r="48" fill="#065f46" />
-                        <path d="M 22 25 L 12 10 L 32 20 Z" fill="#f59e0b" />
-                        <path d="M 78 25 L 88 10 L 68 20 Z" fill="#f59e0b" />
-                        <path d="M 18 35 C 10 30 10 45 22 40 Z" fill="#f43f5e" />
-                        <path d="M 82 35 C 90 30 90 45 78 40 Z" fill="#f43f5e" />
-                        <ellipse cx="50" cy="45" rx="28" ry="24" fill="#ffffff" />
-                        <ellipse cx="50" cy="55" rx="20" ry="14" fill="#fbcfe8" />
-                        <circle cx="44" cy="55" r="2.5" fill="#be185d" />
-                        <circle cx="56" cy="55" r="2.5" fill="#be185d" />
-                        <path d="M 28 36 L 48 36 L 46 48 L 30 48 Z" fill="#0f172a" />
-                        <path d="M 52 36 L 72 36 L 70 48 L 54 48 Z" fill="#0f172a" />
-                        <line x1="48" y1="40" x2="52" y2="40" stroke="#0f172a" strokeWidth="3" />
-                        <line x1="32" y1="38" x2="42" y2="46" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" />
-                        <line x1="56" y1="38" x2="66" y2="46" stroke="#38bdf8" strokeWidth="2.5" strokeLinecap="round" />
-                        <path d="M 32 60 C 32 78 68 78 68 60" fill="none" stroke="#e2e8f0" strokeWidth="4" strokeLinecap="round" />
-                        <circle cx="50" cy="74" r="5" fill="#f59e0b" stroke="#ffffff" strokeWidth="1.5" />
-                      </svg>
-                    </div>
-                  </div>
-                )}
+              <div key={idx} className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {m.sender === 'ai' && <CowAvatar className="h-8 w-8 shrink-0 border border-line" />}
                 <div
-                  className={`p-3 rounded-2xl max-w-[82%] leading-relaxed ${
+                  className={`max-w-[82%] rounded-2xl p-3 leading-relaxed ${
                     m.sender === 'user'
-                      ? 'bg-[#064e3b] text-white rounded-br-xs'
-                      : 'bg-slate-100 text-slate-800 border border-slate-200 rounded-bl-xs'
+                      ? 'rounded-br-sm bg-pine text-white'
+                      : 'rounded-bl-sm border border-line bg-cream text-ink'
                   }`}
                 >
                   <p>{m.text}</p>
@@ -411,7 +350,7 @@ export const AIChatbotWidget: React.FC = () => {
                           setIsOpen(false);
                         }
                       }}
-                      className="mt-2.5 bg-[#10b981] hover:bg-[#059669] text-white text-[11px] font-bold px-3 py-1.5 rounded-lg w-full text-center transition-colors cursor-pointer"
+                      className="mt-2.5 w-full cursor-pointer rounded-lg bg-ochre px-3 py-1.5 text-center text-[11px] font-bold text-ink transition-colors hover:brightness-105"
                     >
                       {m.actionBtn.label}
                     </button>
@@ -420,51 +359,48 @@ export const AIChatbotWidget: React.FC = () => {
               </div>
             ))}
             {isThinking && (
-              <div className="flex gap-2.5 justify-start">
-                <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 via-pink-500 to-emerald-400 p-0.5 shrink-0">
-                  <div className="w-full h-full bg-slate-900 rounded-full" />
-                </div>
-                <div className="bg-slate-100 border border-slate-200 rounded-2xl rounded-bl-xs px-3 py-2.5 text-slate-500">
-                  <span className="inline-flex gap-1 items-center">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:120ms]" />
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce [animation-delay:240ms]" />
+              <div className="flex justify-start gap-2.5">
+                <CowAvatar className="h-8 w-8 shrink-0 border border-line" />
+                <div className="rounded-2xl rounded-bl-sm border border-line bg-cream px-3 py-2.5 text-ink-soft">
+                  <span className="inline-flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-soft" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-soft [animation-delay:120ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-ink-soft [animation-delay:240ms]" />
                   </span>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="p-2 bg-slate-50 border-t border-slate-100 flex gap-1.5 overflow-x-auto scrollbar-none">
+          <div className="flex gap-1.5 overflow-x-auto border-t border-line bg-cream p-2 scrollbar-none">
             {quickQuestions.map((q, i) => (
               <button
                 key={i}
                 onClick={() => handleSend(q)}
                 disabled={isThinking}
-                className="whitespace-nowrap bg-white border border-slate-200 hover:border-emerald-600 disabled:opacity-50 text-slate-700 text-[10px] font-semibold px-2.5 py-1 rounded-full shrink-0 cursor-pointer transition-colors"
+                className="shrink-0 cursor-pointer whitespace-nowrap rounded-full border border-line bg-paper px-2.5 py-1 text-[10px] font-semibold text-ink transition-colors hover:border-pine disabled:opacity-50"
               >
                 {q}
               </button>
             ))}
           </div>
 
-          {/* Input Row */}
-          <div className="p-3 border-t border-slate-200 bg-white flex items-center gap-2">
+          <div className="flex items-center gap-2 border-t border-line bg-paper p-3">
             <input
               type="text"
-              placeholder="Ask Dr. Pashu about cow feed, fat %, or Khata..."
+              placeholder="Ask about feed, fat %, calf care, or khata..."
               value={inputText}
               disabled={isThinking}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              className="flex-1 bg-slate-100 text-xs text-slate-900 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-[#10b981] disabled:opacity-60"
+              className="field flex-1 disabled:opacity-60"
             />
             <button
               onClick={() => handleSend()}
               disabled={isThinking}
-              className="bg-[#064e3b] hover:bg-[#065f46] disabled:opacity-50 text-white p-2 rounded-xl cursor-pointer transition-colors"
+              className="btn btn-primary !p-2.5 disabled:opacity-50"
             >
-              <Send className="w-4 h-4" />
+              <Send className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -472,4 +408,3 @@ export const AIChatbotWidget: React.FC = () => {
     </div>
   );
 };
-

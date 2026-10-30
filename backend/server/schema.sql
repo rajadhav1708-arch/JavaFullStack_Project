@@ -15,6 +15,24 @@ CREATE TABLE IF NOT EXISTS users (
 -- Case-insensitive login: "A@b.com" and "a@b.com" must be the same account.
 CREATE UNIQUE INDEX IF NOT EXISTS users_email_lower_key ON users (lower(email));
 
+-- Bumped whenever the password changes. Sessions embed the version they were
+-- minted with, so an old cookie stops working the moment a reset happens.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INT NOT NULL DEFAULT 0;
+
+-- One-time password reset tokens. Only the SHA-256 hash is stored: a leaked
+-- database dump must not hand out working reset links.
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  id         SERIAL PRIMARY KEY,
+  user_id    INT NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at TIMESTAMPTZ NOT NULL,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS password_reset_tokens_user_idx
+  ON password_reset_tokens (user_id, created_at DESC);
+
 -- ---------------------------------------------------------------- catalogue --
 -- `id` is the stable public slug the UI already uses (e.g. 'prod-1'), kept as
 -- TEXT so product references in carts and orders stay valid across deploys.
@@ -223,3 +241,72 @@ DROP TRIGGER IF EXISTS khata_accounts_touch_updated_at ON khata_accounts;
 CREATE TRIGGER khata_accounts_touch_updated_at
   BEFORE UPDATE ON khata_accounts
   FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+-- ------------------------------------------------ permanent customer IDs --
+-- Every account gets a stable public ID like HT-CUS-10042 at registration.
+-- The numeric `users.id` stays the internal key; customer_code is what the
+-- shop quotes over the counter and what a farmer can log in with, so email is
+-- no longer required (many rural customers do not have one).
+CREATE SEQUENCE IF NOT EXISTS customer_code_seq START 10001;
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS customer_code TEXT;
+
+-- Backfill any account created before this column existed. nextval() per row
+-- guarantees uniqueness without a second pass.
+UPDATE users
+SET customer_code = 'HT-CUS-' || nextval('customer_code_seq')
+WHERE customer_code IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_customer_code_key ON users (customer_code);
+
+-- Email becomes optional. The old unique index stays: Postgres treats NULLs as
+-- distinct in a unique index, so several email-less accounts coexist fine while
+-- two accounts can never share the same address.
+ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+
+-- ------------------------------------------------ khata approval workflow --
+-- 'Pending'   — customer asked for credit, owner has not decided yet.
+-- 'Approved'  — live credit account (what every account created before this
+--               column existed becomes, because the shop had already agreed it).
+-- 'Rejected'  — request refused; rejection_reason says why.
+-- 'Suspended' — credit paused (late payment, moved away...); can be reactivated.
+-- 'Closed'    — account wound up; terminal.
+ALTER TABLE khata_accounts ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Approved'
+  CHECK (status IN ('Pending', 'Approved', 'Rejected', 'Suspended', 'Closed'));
+ALTER TABLE khata_accounts ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE khata_accounts ADD COLUMN IF NOT EXISTS requested_limit NUMERIC(12, 2);
+ALTER TABLE khata_accounts ADD COLUMN IF NOT EXISTS decided_at TIMESTAMPTZ;
+ALTER TABLE khata_accounts ADD COLUMN IF NOT EXISTS decided_by INT REFERENCES users (id);
+
+-- ------------------------------------------------- ledger entry extensions --
+-- entry_type gains 'Adjustment': the auditable way to correct a mistaken
+-- Purchase or Payment. The original row is never edited or deleted — a new
+-- entry reverses it and points back with reverses_entry_id.
+ALTER TABLE khata_entries DROP CONSTRAINT IF EXISTS khata_entries_entry_type_check;
+ALTER TABLE khata_entries ADD CONSTRAINT khata_entries_entry_type_check
+  CHECK (entry_type IN ('Purchase', 'Payment', 'Adjustment'));
+
+-- is_debit: TRUE means the entry INCREASES what the farmer owes (a purchase, or
+-- the reversal of a payment); FALSE decreases it (a payment, or the reversal of
+-- a purchase). Outstanding = SUM(amount WHERE is_debit) - SUM(amount WHERE NOT).
+ALTER TABLE khata_entries ADD COLUMN IF NOT EXISTS is_debit BOOLEAN;
+
+UPDATE khata_entries SET is_debit = (entry_type = 'Purchase') WHERE is_debit IS NULL;
+ALTER TABLE khata_entries ALTER COLUMN is_debit SET NOT NULL;
+
+-- Who recorded it, and how the money moved. Both matter when the owner audits
+-- "who wrote this row and was the cash actually received?".
+ALTER TABLE khata_entries ADD COLUMN IF NOT EXISTS recorded_by INT REFERENCES users (id);
+ALTER TABLE khata_entries ADD COLUMN IF NOT EXISTS payment_method TEXT;
+
+-- Set on Adjustment rows: the entry being corrected. ON DELETE SET NULL keeps
+-- the adjustment even if the original somehow disappears, and the UNIQUE
+-- constraint stops a double-reversal of the same row.
+ALTER TABLE khata_entries ADD COLUMN IF NOT EXISTS reverses_entry_id INT REFERENCES khata_entries (id);
+CREATE UNIQUE INDEX IF NOT EXISTS khata_entries_one_reversal_per_entry
+  ON khata_entries (reverses_entry_id) WHERE reverses_entry_id IS NOT NULL;
+
+-- A cancelled order's reversal is also an Adjustment tied to the same order;
+-- the existing (order_id, entry_type) unique constraint already allows exactly
+-- one Purchase plus one Adjustment per order, which makes the cancellation
+-- path idempotent.

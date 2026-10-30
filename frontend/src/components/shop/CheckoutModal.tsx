@@ -1,60 +1,87 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import { ShippingAddress, Order } from '../../types';
 import { summariseCartUnits } from '../../utils/variants';
+import { STORE } from '../../data/store';
 import {
   MapPin,
   Truck,
   CreditCard,
   CheckCircle2,
   ShieldCheck,
-  Phone,
   ArrowRight,
   ArrowLeft,
-  Sparkles,
+  MessageCircle,
 } from 'lucide-react';
+
+const GST_RATE = 0.05;
+const BULK_DISCOUNT_THRESHOLD = 5000;
+const BULK_DISCOUNT_RATE = 0.05;
+const EXPRESS_CHARGE = 250;
+
+const emptyAddress = (fullName: string, village: string): ShippingAddress => ({
+  fullName,
+  phone: '',
+  villageTown: village,
+  talukaDistrict: '',
+  state: 'Maharashtra',
+  pincode: '',
+  landmark: '',
+});
 
 export const CheckoutModal: React.FC = () => {
   const { cart, cartTotal, placeOrder, setCurrentView, setActiveOrderForTracking } = useApp();
+  const { user } = useAuth();
+  const { t } = useLanguage();
 
-  /** Opens WhatsApp with the order bill pre-filled, ready to send to the
-   *  farmer's phone. No API needed: wa.me does the compose. */
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [address, setAddress] = useState<ShippingAddress>(() =>
+    emptyAddress(user?.name ?? '', user?.village ?? '')
+  );
+  const [deliveryType, setDeliveryType] = useState<Order['deliveryType']>('Standard Farm Delivery');
+  const [paymentMethod, setPaymentMethod] = useState<Order['paymentMethod']>('Cash on Delivery');
+  const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
+  const [isPlacing, setIsPlacing] = useState(false);
+  const [placeError, setPlaceError] = useState<string | null>(null);
+
+  const cartUnits = summariseCartUnits(cart);
+
+  const totals = useMemo(() => {
+    const subtotal = cartTotal;
+    const discount =
+      subtotal > BULK_DISCOUNT_THRESHOLD
+        ? Math.round(subtotal * BULK_DISCOUNT_RATE * 100) / 100
+        : 0;
+    const deliveryCharge = deliveryType === 'Express Tractor Express' ? EXPRESS_CHARGE : 0;
+    const taxBase = Math.max(0, subtotal - discount);
+    const tax = Math.round(taxBase * GST_RATE * 100) / 100;
+    const total = Math.round((taxBase + deliveryCharge + tax) * 100) / 100;
+    return { subtotal, discount, deliveryCharge, tax, total };
+  }, [cartTotal, deliveryType]);
+
+  const addressError = useMemo(() => {
+    if (!address.fullName.trim()) return t('checkout.errorName');
+    if (address.phone.replace(/\D/g, '').length < 10) return t('checkout.errorPhone');
+    if (!address.villageTown.trim()) return t('checkout.errorVillage');
+    if (!address.talukaDistrict.trim()) return t('checkout.errorTaluka');
+    if (!/^\d{5,6}$/.test(address.pincode.trim())) return t('checkout.errorPincode');
+    return null;
+  }, [address, t]);
+
   const shareBillOnWhatsApp = (order: Order) => {
     const lines = order.items
-      .map((i) => `• ${i.productName} (${i.weightKg}kg x${i.quantity}) — ₹${i.totalPrice.toLocaleString('en-IN')}`)
+      .map((item) => `• ${item.productName} (${item.weightKg}kg x${item.quantity}) — ₹${item.totalPrice.toLocaleString('en-IN')}`)
       .join('\n');
     const text =
-      `PashuFeed Pro bill — Order #${order.orderNumber}\n` +
+      `${STORE.name} bill — Order #${order.orderNumber}\n` +
       `${lines}\n` +
       `Subtotal: ₹${order.subtotal.toLocaleString('en-IN')} | Discount: ₹${order.discount} | GST: ₹${order.tax} | Delivery: ₹${order.deliveryCharge}\n` +
       `Total: ₹${order.totalAmount.toLocaleString('en-IN')}\n` +
       `Payment: ${order.paymentMethod} (${order.paymentStatus})`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
   };
-
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-
-  // Form State
-  const [address, setAddress] = useState<ShippingAddress>({
-    fullName: 'Suresh Kumar Patil',
-    phone: '+91 98223 44512',
-    villageTown: 'Kagal Village, Sugar Factory Area',
-    talukaDistrict: 'Kagal, Kolhapur',
-    state: 'Maharashtra',
-    pincode: '416216',
-    landmark: 'Opposite Primary Milk Collection Center',
-  });
-
-  const [deliveryType, setDeliveryType] = useState<Order['deliveryType']>('Standard Farm Delivery');
-  const [paymentMethod, setPaymentMethod] = useState<Order['paymentMethod']>('Khata Credit');
-  const [createdOrder, setCreatedOrder] = useState<Order | null>(null);
-  const [isPlacing, setIsPlacing] = useState(false);
-  const [placeError, setPlaceError] = useState<string | null>(null);
-
-  // Grouped by unit: kilograms, litres and pieces cannot be added together.
-  const cartUnits = summariseCartUnits(cart);
-  const deliveryFee = deliveryType === 'Express Tractor Express' ? 250 : 0;
-  const finalAmount = cartTotal + deliveryFee;
 
   const handleCompleteOrder = async () => {
     if (isPlacing) return;
@@ -65,7 +92,7 @@ export const CheckoutModal: React.FC = () => {
       setCreatedOrder(order);
       setStep(4);
     } catch (error) {
-      setPlaceError(error instanceof Error ? error.message : 'Could not place the order. Please try again.');
+      setPlaceError(error instanceof Error ? error.message : t('checkout.orderError'));
     } finally {
       setIsPlacing(false);
     }
@@ -78,408 +105,282 @@ export const CheckoutModal: React.FC = () => {
     }
   };
 
+  const steps = [t('checkout.stepAddress'), t('checkout.stepDelivery'), t('checkout.stepPayment'), t('checkout.stepConfirmed')];
+
   return (
-    <div className="bg-slate-50 min-h-screen py-10">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Progress Header Steps */}
-        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-xs mb-8">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-500 max-w-xl mx-auto">
-            <div className={`flex items-center gap-1.5 ${step >= 1 ? 'text-emerald-800' : ''}`}>
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-emerald-800 text-white' : 'bg-slate-200'}`}>
-                1
-              </div>
-              <span className="hidden sm:inline">Farm Address</span>
-            </div>
-            <div className="h-0.5 bg-slate-200 flex-1 mx-2" />
-            <div className={`flex items-center gap-1.5 ${step >= 2 ? 'text-emerald-800' : ''}`}>
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-emerald-800 text-white' : 'bg-slate-200'}`}>
-                2
-              </div>
-              <span className="hidden sm:inline">Delivery Speed</span>
-            </div>
-            <div className="h-0.5 bg-slate-200 flex-1 mx-2" />
-            <div className={`flex items-center gap-1.5 ${step >= 3 ? 'text-emerald-800' : ''}`}>
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-emerald-800 text-white' : 'bg-slate-200'}`}>
-                3
-              </div>
-              <span className="hidden sm:inline">Payment Method</span>
-            </div>
-            <div className="h-0.5 bg-slate-200 flex-1 mx-2" />
-            <div className={`flex items-center gap-1.5 ${step === 4 ? 'text-emerald-800' : ''}`}>
-              <div className={`w-7 h-7 rounded-full flex items-center justify-center ${step === 4 ? 'bg-emerald-800 text-white' : 'bg-slate-200'}`}>
-                4
-              </div>
-              <span className="hidden sm:inline">Confirmed</span>
-            </div>
+    <div className="min-h-screen bg-cream py-10">
+      <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+        <div className="card mb-6 p-4 sm:p-5">
+          <div className="mx-auto flex max-w-xl items-center gap-2">
+            {steps.map((label, index) => {
+              const number = index + 1;
+              const active = step >= number;
+              return (
+                <React.Fragment key={label}>
+                  <div className={`flex items-center gap-1.5 ${active ? 'text-pine' : 'text-ink-soft'}`}>
+                    <span
+                      className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
+                        active ? 'bg-pine text-cream' : 'bg-cream text-ink-soft'
+                      }`}
+                    >
+                      {number}
+                    </span>
+                    <span className="hidden text-[11px] font-bold sm:inline">{label}</span>
+                  </div>
+                  {number < steps.length && <div className="h-px flex-1 bg-line" />}
+                </React.Fragment>
+              );
+            })}
           </div>
         </div>
 
-        {/* STEP 1: ADDRESS */}
         {step === 1 && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-              <MapPin className="w-6 h-6 text-emerald-700" />
+          <section className="card space-y-6 p-6 sm:p-8">
+            <div className="flex items-start gap-3 border-b border-line pb-4">
+              <MapPin className="mt-0.5 h-5 w-5 text-pine" />
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Step 1: Farm Delivery Address</h2>
-                <p className="text-xs text-slate-500">Provide exact village & landmark for direct tractor delivery.</p>
+                <h1 className="text-xl text-ink">{t('checkout.addressTitle')}</h1>
+                <p className="text-xs text-ink-soft">{t('checkout.addressHelp')}</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Farmer / Customer Name</label>
-                <input
-                  type="text"
-                  value={address.fullName}
-                  onChange={(e) => setAddress({ ...address, fullName: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-600 font-semibold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Mobile Phone Number</label>
-                <input
-                  type="text"
-                  value={address.phone}
-                  onChange={(e) => setAddress({ ...address, phone: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-600 font-semibold text-slate-900"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="font-bold text-slate-700 block mb-1">Village / Town & House/Barn Address</label>
-                <input
-                  type="text"
-                  value={address.villageTown}
-                  onChange={(e) => setAddress({ ...address, villageTown: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-600 font-semibold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Taluka & District</label>
-                <input
-                  type="text"
-                  value={address.talukaDistrict}
-                  onChange={(e) => setAddress({ ...address, talukaDistrict: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-600 font-semibold text-slate-900"
-                />
-              </div>
-
-              <div>
-                <label className="font-bold text-slate-700 block mb-1">Pincode</label>
-                <input
-                  type="text"
-                  value={address.pincode}
-                  onChange={(e) => setAddress({ ...address, pincode: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-600 font-semibold text-slate-900"
-                />
-              </div>
-
-              <div className="sm:col-span-2">
-                <label className="font-bold text-slate-700 block mb-1">Landmark (e.g. Milk Collection Center / Sugar Mill)</label>
-                <input
-                  type="text"
-                  value={address.landmark}
-                  onChange={(e) => setAddress({ ...address, landmark: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 outline-none focus:border-emerald-600 font-semibold text-slate-900"
-                />
-              </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label={t('checkout.fieldName')} value={address.fullName} onChange={(v) => setAddress({ ...address, fullName: v })} autoComplete="name" />
+              <Field label={t('checkout.fieldPhone')} value={address.phone} onChange={(v) => setAddress({ ...address, phone: v })} autoComplete="tel" inputMode="tel" placeholder={t('checkout.placeholderPhone')} />
+              <Field className="sm:col-span-2" label={t('checkout.fieldVillage')} value={address.villageTown} onChange={(v) => setAddress({ ...address, villageTown: v })} autoComplete="address-line1" />
+              <Field label={t('checkout.fieldTaluka')} value={address.talukaDistrict} onChange={(v) => setAddress({ ...address, talukaDistrict: v })} autoComplete="address-line2" />
+              <Field label={t('checkout.fieldState')} value={address.state} onChange={(v) => setAddress({ ...address, state: v })} autoComplete="address-level1" />
+              <Field label={t('checkout.fieldPincode')} value={address.pincode} onChange={(v) => setAddress({ ...address, pincode: v })} autoComplete="postal-code" inputMode="numeric" />
+              <Field label={t('checkout.fieldLandmark')} value={address.landmark ?? ''} onChange={(v) => setAddress({ ...address, landmark: v })} placeholder={t('checkout.placeholderLandmark')} />
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-slate-100">
+            <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-xs text-clay">{addressError ?? ' '}</p>
               <button
                 onClick={() => setStep(2)}
-                className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-6 py-3.5 rounded-2xl flex items-center gap-2 cursor-pointer"
+                disabled={Boolean(addressError)}
+                className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <span>Continue to Delivery Speed</span>
-                <ArrowRight className="w-4 h-4" />
+                {t('checkout.continueDelivery')}
+                <ArrowRight className="h-4 w-4" />
               </button>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* STEP 2: DELIVERY TYPE */}
         {step === 2 && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-              <Truck className="w-6 h-6 text-emerald-700" />
+          <section className="card space-y-6 p-6 sm:p-8">
+            <div className="flex items-start gap-3 border-b border-line pb-4">
+              <Truck className="mt-0.5 h-5 w-5 text-pine" />
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Step 2: Delivery Option</h2>
-                <p className="text-xs text-slate-500">
-                  Choose how your order ({cartUnits.join(' · ')}) will be delivered.
+                <h1 className="text-xl text-ink">{t('checkout.deliveryTitle')}</h1>
+                <p className="text-xs text-ink-soft">
+                  {cartUnits.join(' · ')}
                 </p>
               </div>
             </div>
 
             <div className="space-y-3">
-              <label
-                onClick={() => setDeliveryType('Standard Farm Delivery')}
-                className={`p-4 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  deliveryType === 'Standard Farm Delivery'
-                    ? 'border-emerald-700 bg-emerald-50/60 ring-2 ring-emerald-600/20'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-800 font-bold">
-                    🚜
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">Standard Village Farm Delivery</div>
-                    <div className="text-xs text-slate-500">Delivered by local village vehicle within 24-36 hours</div>
-                  </div>
-                </div>
-                <span className="font-bold text-emerald-800 text-xs">FREE</span>
-              </label>
-
-              <label
-                onClick={() => setDeliveryType('Express Tractor Express')}
-                className={`p-4 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  deliveryType === 'Express Tractor Express'
-                    ? 'border-emerald-700 bg-emerald-50/60 ring-2 ring-emerald-600/20'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-900 font-bold">
-                    ⚡
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">Express Tractor-Trolley Delivery</div>
-                    <div className="text-xs text-slate-500">Same-day urgent priority dispatch for bulk orders</div>
-                  </div>
-                </div>
-                <span className="font-bold text-slate-900 text-xs">₹250</span>
-              </label>
-
-              <label
-                onClick={() => setDeliveryType('Store Pickup')}
-                className={`p-4 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  deliveryType === 'Store Pickup'
-                    ? 'border-emerald-700 bg-emerald-50/60 ring-2 ring-emerald-600/20'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-slate-200 flex items-center justify-center text-slate-800 font-bold">
-                    🏪
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">Shop Counter Pickup</div>
-                    <div className="text-xs text-slate-500">Pick up feed directly from PashuFeed Central Shop</div>
-                  </div>
-                </div>
-                <span className="font-bold text-emerald-800 text-xs">FREE</span>
-              </label>
+              <Choice
+                selected={deliveryType === 'Standard Farm Delivery'}
+                onSelect={() => setDeliveryType('Standard Farm Delivery')}
+                title={t('checkout.deliveryStandard')}
+                body={t('checkout.deliveryStandardBody')}
+                price={t('checkout.deliveryFree')}
+                icon="🚜"
+              />
+              <Choice
+                selected={deliveryType === 'Express Tractor Express'}
+                onSelect={() => setDeliveryType('Express Tractor Express')}
+                title={t('checkout.deliveryExpress')}
+                body={t('checkout.deliveryExpressBody')}
+                price={t('checkout.deliveryExpressFee')}
+                icon="⚡"
+                tone="ochre"
+              />
+              <Choice
+                selected={deliveryType === 'Store Pickup'}
+                onSelect={() => setDeliveryType('Store Pickup')}
+                title={t('checkout.deliveryPickup')}
+                body={t('checkout.deliveryPickupBody')}
+                price={t('checkout.deliveryFree')}
+                icon="🏪"
+                tone="muted"
+              />
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-              <button
-                onClick={() => setStep(1)}
-                className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to Address</span>
+            <div className="flex items-center justify-between border-t border-line pt-4">
+              <button onClick={() => setStep(1)} className="btn btn-outline !px-3 !py-2 text-xs">
+                <ArrowLeft className="h-4 w-4" />
+                {t('checkout.back')}
               </button>
-
-              <button
-                onClick={() => setStep(3)}
-                className="bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-6 py-3.5 rounded-2xl flex items-center gap-2 cursor-pointer"
-              >
-                <span>Continue to Payment</span>
-                <ArrowRight className="w-4 h-4" />
+              <button onClick={() => setStep(3)} className="btn btn-primary">
+                {t('checkout.continuePayment')}
+                <ArrowRight className="h-4 w-4" />
               </button>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* STEP 3: PAYMENT METHOD */}
         {step === 3 && (
-          <div className="bg-white rounded-3xl p-6 sm:p-8 border border-slate-200 shadow-xs space-y-6">
-            <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
-              <CreditCard className="w-6 h-6 text-emerald-700" />
+          <section className="card space-y-6 p-6 sm:p-8">
+            <div className="flex items-start gap-3 border-b border-line pb-4">
+              <CreditCard className="mt-0.5 h-5 w-5 text-pine" />
               <div>
-                <h2 className="text-xl font-bold text-slate-900">Step 3: Payment Method</h2>
-                <p className="text-xs text-slate-500">Select how you wish to pay for your feed order (₹{finalAmount.toLocaleString('en-IN')}).</p>
+                <h1 className="text-xl text-ink">{t('checkout.paymentTitle')}</h1>
+                <p className="text-xs text-ink-soft">{t('checkout.paymentNote')}</p>
               </div>
             </div>
 
             <div className="space-y-3">
-              {/* Farmer Credit Khata */}
-              <label
-                onClick={() => setPaymentMethod('Khata Credit')}
-                className={`p-4 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  paymentMethod === 'Khata Credit'
-                    ? 'border-emerald-700 bg-emerald-50/80 ring-2 ring-emerald-600/20'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-900 text-amber-300 flex items-center justify-center font-black">
-                    📖
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                      <span>Farmer Credit Khata Account</span>
-                      <span className="bg-emerald-800 text-amber-300 text-[10px] font-bold px-2 py-0.5 rounded-md">
-                        Recommended
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-600 mt-0.5">
-                      Buy now on credit. Pay balance after monthly dairy milk collection billing.
-                    </div>
-                  </div>
-                </div>
-                <ShieldCheck className="w-5 h-5 text-emerald-700" />
-              </label>
-
-              {/* UPI */}
-              <label
-                onClick={() => setPaymentMethod('UPI')}
-                className={`p-4 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  paymentMethod === 'UPI'
-                    ? 'border-emerald-700 bg-emerald-50/80 ring-2 ring-emerald-600/20'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-100 text-purple-900 flex items-center justify-center font-bold">
-                    📲
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">UPI (GPay / PhonePe / Paytm / BHIM)</div>
-                    <div className="text-xs text-slate-500">Instant QR code scan & pay</div>
-                  </div>
-                </div>
-              </label>
-
-              {/* Cash on Delivery */}
-              <label
-                onClick={() => setPaymentMethod('Cash on Delivery')}
-                className={`p-4 rounded-2xl border flex items-center justify-between cursor-pointer transition-all ${
-                  paymentMethod === 'Cash on Delivery'
-                    ? 'border-emerald-700 bg-emerald-50/80 ring-2 ring-emerald-600/20'
-                    : 'border-slate-200 bg-slate-50'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-green-100 text-green-900 flex items-center justify-center font-bold">
-                    💵
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-900 text-sm">Cash on Delivery</div>
-                    <div className="text-xs text-slate-500">Pay cash directly to tractor delivery driver</div>
-                  </div>
-                </div>
-              </label>
+              <Choice
+                selected={paymentMethod === 'Cash on Delivery'}
+                onSelect={() => setPaymentMethod('Cash on Delivery')}
+                title={t('checkout.paymentCash')}
+                body={t('checkout.paymentCashBody')}
+                price={t('checkout.paymentNoCharge')}
+                icon="💵"
+              />
+              <Choice
+                selected={paymentMethod === 'Khata Credit'}
+                onSelect={() => setPaymentMethod('Khata Credit')}
+                title={t('checkout.paymentKhata')}
+                body={t('checkout.paymentKhataBody')}
+                price={t('checkout.paymentApproval')}
+                icon="📖"
+                tone="ochre"
+              />
             </div>
 
-            {/* Order Summary Recap */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs">
-              <div className="flex items-center justify-between font-medium text-slate-600">
-                <span>Items Subtotal ({cart.length} Feeds)</span>
-                <span>₹{cartTotal.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex items-center justify-between font-medium text-slate-600">
-                <span>Delivery Freight Charge</span>
-                <span>₹{deliveryFee}</span>
-              </div>
-              <div className="flex items-center justify-between font-black text-slate-900 text-sm pt-2 border-t border-slate-200">
-                <span>Total Amount</span>
-                <span className="text-emerald-800">₹{finalAmount.toLocaleString('en-IN')}</span>
+            <div className="space-y-2 rounded-2xl border border-line bg-cream/70 p-4 text-xs">
+              <Row label={t('checkout.itemsSubtotal', { n: cart.length })} value={`₹${totals.subtotal.toLocaleString('en-IN')}`} />
+              {totals.discount > 0 && <Row label={t('checkout.bulkDiscount')} value={`− ₹${totals.discount.toLocaleString('en-IN')}`} />}
+              <Row label={t('checkout.gstLabel')} value={`₹${totals.tax.toLocaleString('en-IN')}`} />
+              <Row label={t('checkout.deliveryLabel')} value={totals.deliveryCharge === 0 ? t('checkout.deliveryFree') : `₹${totals.deliveryCharge}`} />
+              <div className="flex items-center justify-between border-t border-line pt-2 text-sm font-bold text-ink">
+                <span>{t('checkout.totalPayable')}</span>
+                <span className="font-display text-lg">₹{totals.total.toLocaleString('en-IN')}</span>
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-slate-100">
-              <button
-                onClick={() => setStep(2)}
-                className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
-              >
-                <ArrowLeft className="w-4 h-4" />
-                <span>Back to Delivery</span>
+            <div className="flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <button onClick={() => setStep(2)} className="btn btn-outline !px-3 !py-2 text-xs">
+                <ArrowLeft className="h-4 w-4" />
+                {t('checkout.back')}
               </button>
 
-              <div className="flex flex-col items-end gap-2">
-                {placeError && <p className="text-xs font-semibold text-red-600">{placeError}</p>}
-                <button
-                  onClick={handleCompleteOrder}
-                  disabled={isPlacing}
-                  className="bg-emerald-800 hover:bg-emerald-900 disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold text-xs sm:text-sm px-8 py-3.5 rounded-2xl flex items-center gap-2 shadow-lg cursor-pointer active:scale-95"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-300" />
-                  <span>{isPlacing ? 'Placing Order…' : 'Confirm & Place Order'}</span>
+              <div className="flex flex-col items-stretch gap-2 sm:items-end">
+                {placeError && <p className="text-xs font-semibold text-clay">{placeError}</p>}
+                <button onClick={handleCompleteOrder} disabled={isPlacing} className="btn btn-primary disabled:cursor-not-allowed disabled:opacity-60">
+                  {isPlacing ? t('checkout.placingOrder') : t('checkout.placeOrder')}
+                  <ShieldCheck className="h-4 w-4" />
                 </button>
               </div>
             </div>
-          </div>
+          </section>
         )}
 
-        {/* STEP 4: ORDER CONFIRMED */}
         {step === 4 && createdOrder && (
-          <div className="bg-white rounded-3xl p-8 border border-slate-200 shadow-xl text-center space-y-6 max-w-2xl mx-auto">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle2 className="w-10 h-10" />
+          <section className="card mx-auto max-w-2xl space-y-6 p-8 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-pine-soft text-pine">
+              <CheckCircle2 className="h-9 w-9" />
             </div>
 
             <div>
-              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full uppercase">
-                Order Successful
+              <span className="rounded-full bg-pine-soft px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-pine">
+                {t('checkout.confirmedBadge')}
               </span>
-              <h2 className="text-2xl font-black text-slate-900 mt-2">
-                Order #{createdOrder.orderNumber} Placed!
-              </h2>
-              <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                Thank you, {createdOrder.customerName}. Your feed order has been logged and dispatched to local village freight.
+              <h1 className="mt-3 text-2xl text-ink">{t('checkout.orderNumber', { n: createdOrder.orderNumber })}</h1>
+              <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-ink-soft">
+                {t('checkout.thankYou', { name: createdOrder.customerName })}
               </p>
             </div>
 
-            {/* Receipt Summary Box */}
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-left space-y-2 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span>Delivery Address:</span>
-                <span className="font-bold text-slate-900">{createdOrder.shippingAddress.villageTown}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Payment Mode:</span>
-                <span className="font-bold text-emerald-800">{createdOrder.paymentMethod}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Total Amount:</span>
-                <span className="font-bold text-slate-900">₹{createdOrder.totalAmount.toLocaleString('en-IN')}</span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Est. Barn Arrival:</span>
-                <span className="font-bold text-amber-800">{createdOrder.estimatedDeliveryDate}</span>
-              </div>
+            <div className="space-y-2 rounded-2xl border border-line bg-cream/70 p-4 text-left text-xs">
+              <Row label={t('checkout.deliverTo')} value={createdOrder.shippingAddress.villageTown} />
+              <Row label={t('checkout.payment')} value={`${createdOrder.paymentMethod} (${createdOrder.paymentStatus})`} />
+              <Row label={t('checkout.total')} value={`₹${createdOrder.totalAmount.toLocaleString('en-IN')}`} />
+              <Row label={t('checkout.expectedDelivery')} value={createdOrder.estimatedDeliveryDate} />
             </div>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
-              <button
-                onClick={handleTrackOrder}
-                className="w-full sm:w-auto bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <Truck className="w-4 h-4" />
-                <span>Track Live Order Status</span>
+            <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
+              <button onClick={handleTrackOrder} className="btn btn-primary w-full sm:w-auto">
+                <Truck className="h-4 w-4" />
+                {t('checkout.trackOrder')}
               </button>
-
-              <button
-                onClick={() => shareBillOnWhatsApp(createdOrder)}
-                className="w-full sm:w-auto bg-[#25D366] hover:bg-[#1ebe5d] text-white font-bold text-xs px-6 py-3.5 rounded-2xl flex items-center justify-center gap-2 cursor-pointer"
-              >
-                <span>Send Bill on WhatsApp</span>
+              <button onClick={() => shareBillOnWhatsApp(createdOrder)} className="btn btn-outline w-full sm:w-auto">
+                <MessageCircle className="h-4 w-4" />
+                {t('checkout.sendWhatsapp')}
               </button>
-
-              <button
-                onClick={() => setCurrentView('home')}
-                className="w-full sm:w-auto bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs px-6 py-3.5 rounded-2xl cursor-pointer"
-              >
-                Back to Home
+              <button onClick={() => setCurrentView('home')} className="btn btn-outline w-full sm:w-auto">
+                {t('checkout.backHome')}
               </button>
             </div>
-          </div>
+          </section>
         )}
       </div>
     </div>
   );
 };
+
+const Field: React.FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  className?: string;
+  placeholder?: string;
+  autoComplete?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
+}> = ({ label, value, onChange, className = '', placeholder, autoComplete, inputMode }) => (
+  <label className={`block ${className}`}>
+    <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">{label}</span>
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      placeholder={placeholder}
+      autoComplete={autoComplete}
+      inputMode={inputMode}
+      className="field"
+    />
+  </label>
+);
+
+const Choice: React.FC<{
+  selected: boolean;
+  onSelect: () => void;
+  title: string;
+  body: string;
+  price: string;
+  icon: string;
+  tone?: 'pine' | 'ochre' | 'muted';
+}> = ({ selected, onSelect, title, body, price, icon, tone = 'pine' }) => (
+  <button
+    type="button"
+    onClick={onSelect}
+    className={`flex w-full items-center justify-between gap-4 rounded-2xl border p-4 text-left transition-colors ${
+      selected ? 'border-pine bg-pine-soft/60 ring-2 ring-pine/15' : 'border-line bg-cream/40 hover:border-pine/40'
+    }`}
+  >
+    <span className="flex items-center gap-3">
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg ${
+          tone === 'ochre' ? 'bg-ochre-soft' : tone === 'muted' ? 'bg-cream' : 'bg-pine-soft'
+        }`}
+      >
+        {icon}
+      </span>
+      <span>
+        <span className="block text-sm font-bold text-ink">{title}</span>
+        <span className="mt-0.5 block text-xs leading-relaxed text-ink-soft">{body}</span>
+      </span>
+    </span>
+    <span className="shrink-0 text-xs font-bold text-ink">{price}</span>
+  </button>
+);
+
+const Row: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="flex items-start justify-between gap-4 text-ink-soft">
+    <span>{label}</span>
+    <span className="text-right font-semibold text-ink">{value}</span>
+  </div>
+);

@@ -8,23 +8,20 @@ interface AuthContextType {
   isLoading: boolean;
   /** True when the API reported DB_DISABLED, i.e. accounts cannot be used at all. */
   isUnavailable: boolean;
-  login: (email: string, password: string) => Promise<string | null>;
+  /** identifier is the permanent customer ID (HT-CUS-...) or the email. */
+  login: (identifier: string, password: string) => Promise<string | null>;
+  /** Returns null on success, else the server's message. Email is optional. */
   register: (input: {
-    email: string;
+    email?: string;
     password: string;
     name: string;
     village?: string;
-  }) => Promise<string | null>;
+  }) => Promise<{ failure: string | null; user: AuthUser | null }>;
   logout: () => Promise<void>;
   /** Replaces the current user after a profile update (name, village, ...). */
   updateUser: (u: AuthUser | null) => void;
-  /** Opens the login dialog from anywhere that needs a signed-in user. */
-  openAuthModal: (reason?: string) => void;
-  closeAuthModal: () => void;
   /** Redirect to login page with return path. */
   redirectToLogin: (reason?: string) => void;
-  isAuthModalOpen: boolean;
-  authModalReason: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -69,8 +66,6 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUnavailable, setIsUnavailable] = useState(false);
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalReason, setAuthModalReason] = useState('');
 
   // Restore the session from the httpOnly cookie on first paint.
   useEffect(() => {
@@ -97,44 +92,32 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
     };
   }, []);
 
-  const openAuthModal = useCallback((reason = '') => {
-    setAuthModalReason(reason);
-    setIsAuthModalOpen(true);
-  }, []);
-
-  const closeAuthModal = useCallback(() => {
-    setIsAuthModalOpen(false);
-    setAuthModalReason('');
-  }, []);
-
   const redirectToLogin = useCallback((reason = '') => {
     const from = location.pathname + location.search;
     navigate('/login', { state: { from, reason }, replace: true });
   }, [navigate, location]);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const result = await postAuth('/login', { email, password });
+  const login = useCallback(async (identifier: string, password: string) => {
+    const result = await postAuth('/login', { identifier, password });
     if ('code' in result) {
       if (result.unavailable) setIsUnavailable(true);
       return result.message;
     }
     setUser(result.user);
-    closeAuthModal();
     return null;
-  }, [closeAuthModal]);
+  }, []);
 
   const register = useCallback(
-    async (input: { email: string; password: string; name: string; village?: string }) => {
+    async (input: { email?: string; password: string; name: string; village?: string }) => {
       const result = await postAuth('/register', input);
       if ('code' in result) {
         if (result.unavailable) setIsUnavailable(true);
-        return result.message;
+        return { failure: result.message, user: null };
       }
       setUser(result.user);
-      closeAuthModal();
-      return null;
+      return { failure: null, user: result.user };
     },
-    [closeAuthModal]
+    []
   );
 
   const logout = useCallback(async () => {
@@ -155,13 +138,9 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       register,
       logout,
       updateUser: (u) => setUser(u),
-      openAuthModal,
-      closeAuthModal,
       redirectToLogin,
-      isAuthModalOpen,
-      authModalReason,
     }),
-    [user, isLoading, isUnavailable, login, register, logout, openAuthModal, closeAuthModal, redirectToLogin, isAuthModalOpen, authModalReason]
+    [user, isLoading, isUnavailable, login, register, logout, redirectToLogin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

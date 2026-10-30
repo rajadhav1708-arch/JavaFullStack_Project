@@ -7,7 +7,8 @@
   "scripts": {
     "dev": "concurrently -n web,api -c cyan,green \"vite --config frontend/vite.config.ts\" \"npm:server\"",
     "server": "tsx watch backend/server/index.ts",
-    "build": "vite build --config frontend/vite.config.ts",
+    "build": "npm run build:api && vite build --config frontend/vite.config.ts",
+    "build:api": "node scripts/build-api.mjs",
     "preview": "vite preview --config frontend/vite.config.ts",
     "lint": "tsc --noEmit",
     "db:init": "tsx backend/server/migrate.ts",
@@ -17,13 +18,16 @@
     "@google/genai": "^2.16.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
+    "express-rate-limit": "^8.7.1",
     "framer-motion": "^14.0.0",
+    "helmet": "^8.3.0",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.546.0",
     "pg": "^8.23.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
-    "react-router-dom": "^7.18.4"
+    "react-router-dom": "^7.18.4",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.14",
@@ -35,6 +39,8 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^5.0.4",
     "concurrently": "^10.0.5",
+    "esbuild": "^0.25.12",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
