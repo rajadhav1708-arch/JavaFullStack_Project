@@ -1,0 +1,6 @@
+d in place.
+CREATE TABLE IF NOT EXISTS khata_entries (
+  id         SERIAL PRIMARY KEY,
+  account_id INT NOT NULL REFERENCES khata_accounts (id) ON DELETE CASCADE,
+  entry_type TEXT NOT NULL CHECK (entry_type IN ('Purchase', 'Payment')),
+  amount     NUMERIC(12, 2) NOT NULL 
