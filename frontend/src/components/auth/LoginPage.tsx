@@ -176,7 +176,7 @@ export const LoginPage: React.FC = () => {
     justRegistered
       ? `Welcome, ${justRegistered.name}. This is your permanent Customer ID — use it with your password to sign in any time.`
       : mode === 'login'
-        ? 'Use your Customer ID or email. Your orders, Khata balance and invoices stay in one place.'
+        ? 'Use your Customer ID or username. Your orders, Khata balance and invoices stay in one place.'
         : mode === 'register'
           ? 'No email needed. You will get a permanent Customer ID to sign in with.'
           : mode === 'forgot'
@@ -200,8 +200,8 @@ export const LoginPage: React.FC = () => {
 
           <div className="relative px-12 py-14">
             <Link to="/home" className="inline-flex items-center gap-2.5">
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cream font-display text-xl font-semibold text-pine">
-                H
+              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cream p-1">
+                <img src="/brand/hindavi-logo.png" alt="" className="h-full w-full object-contain" />
               </span>
               <span className="font-display text-xl font-semibold">{STORE.name}</span>
             </Link>
@@ -228,8 +228,8 @@ export const LoginPage: React.FC = () => {
 
             <div className="card p-6 sm:p-8">
               <div className="flex items-center gap-2.5 lg:hidden">
-                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-pine font-display text-lg font-semibold text-cream">
-                  H
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-cream p-1 ring-1 ring-line">
+                  <img src="/brand/hindavi-logo.png" alt="" className="h-full w-full object-contain" />
                 </span>
                 <span className="font-display text-lg font-semibold text-ink">{STORE.name}</span>
               </div>
@@ -342,11 +342,11 @@ export const LoginPage: React.FC = () => {
                 {mode === 'login' && (
                   <Field
                     id="login-identifier"
-                    label="Customer ID or email"
+                    label="Customer ID or username"
                     type="text"
                     value={identifier}
                     onChange={setIdentifier}
-                    placeholder="HT-CUS-10042 or you@example.com"
+                    placeholder="HT-CUS-10001 or pratikgunjal"
                     autoComplete="username"
                     required
                   />
@@ -481,17 +481,7 @@ export const LoginPage: React.FC = () => {
                 </p>
               )}
 
-              {import.meta.env.DEV && !justRegistered && mode !== 'reset' && mode !== 'forgot' && (
-                <details className="mt-5 rounded-xl border border-line bg-cream p-3 text-[11px] text-ink-soft">
-                  <summary className="cursor-pointer font-bold text-ink">Demo accounts (development only)</summary>
-                  <div className="mt-2 font-mono text-[11px]">
-                    admin@pashufeed.test / Admin@12345
-                    <br />
-                    farmer@pashufeed.test / Farmer@12345
-                  </div>
-                </details>
-              )}
-            </div>
+              </div>
 
             <p className="mt-5 flex items-center justify-center gap-1.5 text-[11px] text-ink-soft">
               <Mail className="h-3.5 w-3.5" />

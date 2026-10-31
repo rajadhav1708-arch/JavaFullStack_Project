@@ -57,7 +57,7 @@ const PRODUCT_COLUMNS = `
   -- JSON-serialises back a day earlier in any timezone ahead of UTC, so an
   -- expiry of 2027-02-01 would reach the browser as 2027-01-31.
   to_char(p.expiry_date, 'YYYY-MM-DD') AS expiry_date,
-  p.is_best_seller, p.is_recommended, p.default_weight_kg,
+  p.is_best_seller, p.is_recommended, p.is_new, p.sort_order, p.default_weight_kg,
   ${VARIANTS_JSON}
 `;
 
@@ -89,6 +89,8 @@ interface ProductRow {
   expiry_date: string | null;
   is_best_seller: boolean;
   is_recommended: boolean;
+  is_new: boolean;
+  sort_order: number;
   variants: { weightKg: number; unit: ProductUnit; price: number; stock: number }[];
 }
 
@@ -133,6 +135,8 @@ function toProduct(row: ProductRow): Product {
     image: row.image ?? '',
     isBestSeller: row.is_best_seller,
     isRecommended: row.is_recommended,
+    isNew: row.is_new,
+    sortOrder: row.sort_order,
   };
 }
 
@@ -195,7 +199,7 @@ productsRouter.get('/products', dbGuard, async (req, res) => {
       `SELECT ${PRODUCT_COLUMNS}
        FROM products p
        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-       ORDER BY p.is_best_seller DESC, p.rating DESC, p.name`,
+       ORDER BY p.is_new DESC, p.sort_order ASC, p.is_best_seller DESC, p.rating DESC, p.name`,
       params
     );
     res.json({ products: rows.map(toProduct) });

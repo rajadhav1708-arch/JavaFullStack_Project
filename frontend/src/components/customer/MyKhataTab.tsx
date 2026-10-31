@@ -12,7 +12,7 @@ import { BookOpen, Clock, XCircle, PauseCircle, ShieldCheck, Loader2 } from 'luc
  */
 export const MyKhataTab: React.FC = () => {
   const { khataRecords, fetchKhata, addToast } = useApp();
-  const { user } = useAuth();
+  const { user, csrfToken } = useAuth();
 
   const myKhata = khataRecords.find(
     (record) => user != null && record.customerId === `user-${user.id}`
@@ -34,7 +34,7 @@ export const MyKhataTab: React.FC = () => {
     try {
       const res = await fetch('/api/khata/request', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
         body: JSON.stringify({ phone, village, requestedLimit, consent }),
       });
       const body = (await res.json().catch(() => ({}))) as { message?: string };

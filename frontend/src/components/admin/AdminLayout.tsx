@@ -64,8 +64,8 @@ export const AdminLayout: React.FC = () => {
         <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-12">
           <aside className="sticky top-24 overflow-hidden rounded-2xl border border-line bg-paper shadow-sm lg:col-span-3">
             <div className="flex items-center gap-3 border-b border-line p-4">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-pine text-sm font-bold text-cream">
-                H
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-cream p-1 ring-1 ring-line">
+                <img src="/brand/hindavi-logo.png" alt="" className="h-full w-full object-contain" />
               </div>
               <div className="min-w-0">
                 <span className="block truncate text-sm font-bold tracking-tight text-ink">

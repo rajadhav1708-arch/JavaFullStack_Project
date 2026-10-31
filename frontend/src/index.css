@@ -245,37 +245,36 @@ html.theme-contrast body {
   filter: contrast(1.16) saturate(1.15);
 }
 
-/* ---- Parallax scene hand-off -------------------------------------- */
-/* ScrollAnimationBackground holds html[data-parallax-done] = 'false' while
-   the hero scene plays. Main content below the hero is held back until the
-   scene completes, then eases in. No attribute at all = visible (JS/scene
-   absent, other routes, after navigation cleanup). */
+/* ---- Full-page parallax sections ---------------------------------- */
+/* Each home section starts partly transparent so the fixed, scroll-scrubbed
+   background stays visible underneath it, then eases to full opacity as it
+   travels up the viewport (useSectionsParallax). CSS defaults to visible so
+   the page can never be left dark if the hook is unavailable. */
 
-html[data-parallax-done='false'] .home-reveal {
-  opacity: 0;
-  transform: translateY(24px);
+.parallax-section {
+  opacity: 1;
+  will-change: opacity;
 }
 
-html[data-parallax-done='true'] .home-reveal {
+/* The section-level fade already provides the entrance; the per-card reveal
+   would multiply with it and make the first frames nearly invisible. */
+.parallax-section [data-reveal],
+.parallax-section [data-reveal].is-visible {
   opacity: 1;
-  transform: translateY(0);
-  transition:
-    opacity 700ms ease,
-    transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform: none;
+  transition: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  html .home-reveal {
+  .parallax-section {
     opacity: 1 !important;
-    transform: none !important;
-    transition: none !important;
+    will-change: auto;
   }
 }
 
 @media print {
-  .home-reveal {
+  .parallax-section {
     opacity: 1 !important;
-    transform: none !important;
   }
 }
 

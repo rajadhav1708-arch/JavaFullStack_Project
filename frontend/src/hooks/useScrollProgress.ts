@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from 'react';
 
 /**
  * One scroll listener for the whole app, driven by a single requestAnimationFrame.
@@ -151,6 +151,54 @@ export function useScrollFrame(handler: FrameListener): void {
       if (listeners.size === 0) detach();
     };
   }, []);
+}
+
+/**
+ * Drives the opacity of every `[data-parallax-section]` under `ref`.
+ *
+ * A section enters at `minOpacity` and eases to full opacity as it travels
+ * through the viewport, so the fixed background stays visible under each new
+ * block instead of being covered by opaque page sections. Direct style writes
+ * keep this out of React's render loop; the shared scroll listener does all
+ * the work once per frame.
+ */
+export function useSectionsParallax<T extends HTMLElement>(
+  minOpacity = 0.55,
+  fullAt = 0.42
+): { ref: RefObject<T | null> } {
+  const ref = useRef<T | null>(null);
+
+  const sync = useCallback(
+    (viewportHeight: number): void => {
+      const root = ref.current;
+      if (!root) return;
+
+      const reduced = prefersReducedMotion();
+      const sections = root.querySelectorAll<HTMLElement>('[data-parallax-section]');
+      sections.forEach((section) => {
+        if (reduced) {
+          section.style.opacity = '1';
+          return;
+        }
+
+        const progress = progressThroughViewport(section, viewportHeight);
+        const t = Math.min(1, Math.max(0, progress / Math.max(0.05, fullAt)));
+        const eased = t * t * (3 - 2 * t);
+        section.style.opacity = (minOpacity + (1 - minOpacity) * eased).toFixed(3);
+      });
+    },
+    [minOpacity, fullAt]
+  );
+
+  useScrollFrame((_scrollY, viewportHeight) => sync(viewportHeight));
+
+  // Paint the first state before the browser shows the page, so a section
+  // never flashes fully opaque before its reduced-opacity entrance.
+  useLayoutEffect(() => {
+    sync(window.innerHeight);
+  }, [sync]);
+
+  return { ref };
 }
 
 /**

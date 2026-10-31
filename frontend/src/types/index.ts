@@ -7,6 +7,8 @@ export interface AuthUser {
   email: string;
   /** Permanent public ID (HT-CUS-10042). Stable for life; safe to log in with. */
   customerCode: string;
+  /** Modifiable login handle chosen at registration; changeable later in My Account. */
+  username: string | null;
   name: string;
   role: UserRole;
   village: string | null;
@@ -129,6 +131,10 @@ export interface Product {
   detailImage?: string;
   isBestSeller?: boolean;
   isRecommended?: boolean;
+  /** A freshly added catalogue item; shown first under the default sort. */
+  isNew?: boolean;
+  /** Manual order inside its group. Lower numbers come first. */
+  sortOrder?: number;
 }
 
 export interface ProductCategoryMeta {

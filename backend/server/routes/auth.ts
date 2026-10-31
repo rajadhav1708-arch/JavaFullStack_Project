@@ -42,10 +42,10 @@ const limiter = (limit: number, windowMs = 15 * 60 * 1000) =>
     },
   });
 
-const loginLimiter = limiter(20);
-const registerLimiter = limiter(10, 60 * 60 * 1000);
-const forgotLimiter = limiter(5);
-const resetLimiter = limiter(10);
+const loginLimiter = limiter(5);
+const registerLimiter = limiter(5, 60 * 60 * 1000);
+const forgotLimiter = limiter(3);
+const resetLimiter = limiter(5);
 
 const emailSchema = z.string().trim().max(254).refine(
   (value) => value === '' || z.string().email().safeParse(value).success,
@@ -57,6 +57,15 @@ const registerSchema = z.object({
   // be forced to invent a fake address. When present it must be valid, and it
   // unlocks the self-service password-reset link.
   email: emailSchema.optional().default(''),
+  username: z
+    .string()
+    .trim()
+    .min(3, 'Username must be at least 3 characters.')
+    .max(120, 'Username is too long.')
+    .refine(
+      (value) => /^[a-z0-9_-]+$/i.test(value),
+      'Username may only contain letters, numbers, underscores and hyphens.'
+    ),
   password: z
     .string()
     .min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`)
@@ -65,9 +74,11 @@ const registerSchema = z.object({
   village: z.string().trim().max(120, 'Village name is too long.').optional().default(''),
 });
 
-// Login accepts EITHER the permanent customer ID (HT-CUS-10042) or the email.
+// Login accepts EITHER the permanent Customer ID (HT-CUS-10042) or the
+// username. Email is no longer a login identifier (it stays optional for
+// password reset only).
 const loginSchema = z.object({
-  identifier: z.string().trim().min(3, 'Enter your Customer ID or email.').max(254),
+  identifier: z.string().trim().min(3, 'Enter your username or Customer ID.').max(254),
   password: z.string().min(1, 'Enter your password.').max(200),
 });
 
@@ -112,19 +123,19 @@ authRouter.post('/register', registerLimiter, dbGuard, async (req, res) => {
   }
 
   const { password, name, village } = parsed.data;
-  // Blank means "no email"; anything else must be a real address (schema-checked).
   const normalisedEmail = parsed.data.email ? normaliseEmail(parsed.data.email) : null;
 
   try {
     // Role is hard-coded to 'customer'. A client can never request 'admin'.
-    // The permanent customer ID comes from a Postgres sequence, so two people
+    // The permanent Customer ID comes from a Postgres sequence, so two people
     // registering at the same instant cannot be handed the same ID — the unique
-    // index would reject the second insert rather than silently collide.
+    // index would reject the second insert rather than silently collide. The
+    // username is also unique, so two customers cannot pick the same handle.
     const rows = await query<SessionUser & { session_version: number }>(
-      `INSERT INTO users (email, password_hash, name, role, village, customer_code)
-       VALUES ($1, $2, $3, 'customer', $4, 'HT-CUS-' || nextval('customer_code_seq'))
-       RETURNING id, email, customer_code AS "customerCode", name, role, village, session_version`,
-      [normalisedEmail, await hashPassword(password), name, village || null]
+      `INSERT INTO users (email, username, password_hash, name, role, village, customer_code)
+       VALUES ($1, $2, $3, $4, 'customer', $5, 'HT-CUS-' || nextval('customer_code_seq'))
+       RETURNING id, email, username, customer_code AS "customerCode", name, role, village, session_version`,
+      [normalisedEmail, parsed.data.username || null, await hashPassword(password), name, village || null]
     );
 
     const { session_version, ...user } = rows[0];
@@ -132,7 +143,7 @@ authRouter.post('/register', registerLimiter, dbGuard, async (req, res) => {
     sendUser(res, user);
   } catch (error) {
     if (isUniqueViolation(error)) {
-      res.status(409).json({ error: 'EMAIL_TAKEN', message: 'An account with that email already exists.' });
+      res.status(409).json({ error: 'USERNAME_TAKEN', message: 'That username is already taken. Choose another.' });
       return;
     }
     if (error instanceof DbUnavailableError) {
@@ -151,18 +162,18 @@ authRouter.post('/login', loginLimiter, dbGuard, async (req, res) => {
     return;
   }
 
-  const identifier = parsed.data.identifier.trim();
+    const identifier = parsed.data.identifier.trim();
 
-  try {
-    // Match on the permanent customer ID or the email. customer_code comparison
-    // is upper-cased on both sides so "ht-cus-10042" also works; the email path
-    // stays lower-case as before.
-    const rows = await query<SessionUser & { password_hash: string; session_version: number }>(
-      `SELECT id, email, customer_code AS "customerCode", name, role, village, password_hash, session_version
-       FROM users
-       WHERE upper(customer_code) = upper($1) OR (email IS NOT NULL AND lower(email) = lower($1))`,
-      [identifier]
-    );
+    try {
+      // Match on the permanent Customer ID or the username. customer_code
+      // comparison is upper-cased on both sides so "ht-cus-10042" also works;
+      // username comparison is lower-case.
+      const rows = await query<SessionUser & { password_hash: string; session_version: number }>(
+        `SELECT id, email, username, customer_code AS "customerCode", name, role, village, password_hash, session_version
+         FROM users
+         WHERE upper(customer_code) = upper($1) OR (username IS NOT NULL AND lower(username) = lower($1))`,
+        [identifier]
+      );
 
     const user = rows[0];
     // Hash even when the user is missing so timing does not reveal whether the
@@ -288,16 +299,31 @@ authRouter.patch('/me', dbGuard, async (req, res) => {
       res.status(401).json({ error: 'NOT_AUTHENTICATED', message: 'No active session.' });
       return;
     }
-    const { name, village } = (req.body ?? {}) as { name?: string; village?: string };
+    const { name, village, username } = (req.body ?? {}) as { name?: string; village?: string; username?: string };
     if (typeof name !== 'undefined' && (typeof name !== 'string' || !name.trim())) {
       res.status(400).json({ error: 'BAD_NAME', message: 'Enter a valid name.' });
       return;
     }
-    const rows = await query<SessionUser>(
-      'UPDATE users SET name = COALESCE($1, name), village = COALESCE($2, village) WHERE id = $3 RETURNING id, email, customer_code AS "customerCode", name, role, village',
-      [typeof name === 'string' ? name.trim() : null, typeof village === 'string' ? village.trim() : null, user.id]
-    );
-    sendUser(res, rows[0]);
+    if (typeof username !== 'undefined') {
+      if (typeof username !== 'string' || !/^[a-z0-9_-]+$/i.test(username.trim())) {
+        res.status(400).json({ error: 'BAD_USERNAME', message: 'Username may only contain letters, numbers, underscores and hyphens.' });
+        return;
+      }
+    }
+    try {
+      const rows = await query<SessionUser>(
+        'UPDATE users SET name = COALESCE($1, name), village = COALESCE($2, village), username = COALESCE($3, username) WHERE id = $4 RETURNING id, email, username, customer_code AS "customerCode", name, role, village',
+        [typeof name === 'string' ? name.trim() : null, typeof village === 'string' ? village.trim() : null, typeof username === 'string' ? username.trim() : null, user.id]
+      );
+      sendUser(res, rows[0]);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        res.status(409).json({ error: 'USERNAME_TAKEN', message: 'That username is already taken. Choose another.' });
+        return;
+      }
+      console.error('[api/auth/me PATCH]', error);
+      res.status(500).json({ error: 'SERVER_ERROR', message: 'Could not update the profile.' });
+    }
   } catch (error) {
     console.error('[api/auth/me PATCH]', error);
     res.status(500).json({ error: 'SERVER_ERROR', message: 'Could not update the profile.' });

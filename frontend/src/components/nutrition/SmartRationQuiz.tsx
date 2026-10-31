@@ -89,18 +89,20 @@ export const SmartRationQuiz: React.FC = () => {
   const handleCalculateRation = () => {
     const bySku = (sku: string): Product | undefined => products.find((p) => p.sku === sku);
 
-    const cowFeed = bySku('PP-GLD-50KG');
-    const buffaloFeed = bySku('DMX-BUF-50KG');
-    const calfFeed = bySku('PP-CLF-25KG');
-    const calciumProduct = bySku('VET-CAL-5L');
-    const bypassFatProduct = bySku('NRT-FAT-10KG');
-    const mineralProduct = bySku('KCN-MIN-1KG');
+    const pick = (...skus: string[]): Product | undefined => {
+      for (const sku of skus) {
+        const product = bySku(sku);
+        if (product) return product;
+      }
+      return undefined;
+    };
 
-    const required = [cowFeed, buffaloFeed, calfFeed, calciumProduct];
-    if (!required.every(Boolean)) {
-      addToast('The ration calculator needs catalogue products to estimate costs. Please seed the database.', 'error');
-      return;
-    }
+    const calfFeed = pick('PP-CLF-25KG');
+    const calciumProduct = pick('VET-CAL-5L');
+    const bypassFatProduct = pick('NRT-FAT-10KG');
+    const mineralProduct = pick('KCN-MIN-1KG');
+    const buffaloStandard = pick('AMUL-BUF-50KG', 'FDM-BUF-40KG', 'DMX-BUF-50KG');
+    const dairyCowStandard = pick('HER-GMT-50KG', 'KKA-DST1-50KG', 'PP-GLD-50KG');
 
     const {
       animalType,
@@ -110,6 +112,14 @@ export const SmartRationQuiz: React.FC = () => {
       healthGoals,
       numberOfAnimals,
     } = formData;
+
+    const wantsFatBoost =
+      healthGoals.includes('Milk Fat % Boost (SNF)') ||
+      milkYieldLiters >= 15 ||
+      fatPercentTarget > 6;
+    const wantsVolume =
+      healthGoals.includes('Milk Volume Increase (+2L/day)') || milkYieldLiters >= 12;
+    const wantsDigestion = healthGoals.includes('Improve Digestion & Rumen Health');
 
     let baseRationKg: number;
     let energyNote: string;
@@ -157,12 +167,32 @@ export const SmartRationQuiz: React.FC = () => {
 
     const dailyRationKg = Math.max(1, Math.round(baseRationKg * stageMultiplier * 10) / 10);
 
-    const primaryProduct =
-      animalType === 'Buffalo'
-        ? buffaloFeed
-        : animalType === 'Calf'
-          ? calfFeed
-          : cowFeed;
+    let primaryProduct: Product | undefined;
+
+    if (animalType === 'Buffalo') {
+      if (wantsFatBoost && fatPercentTarget >= 7) {
+        primaryProduct = pick('HER-BUF-50KG', 'AMUL-BUF-50KG', 'DMX-BUF-50KG');
+      } else if (wantsVolume) {
+        primaryProduct = pick('SAR-BUFF-50KG', 'AMUL-BUF-50KG', 'DMX-BUF-50KG');
+      } else {
+        primaryProduct = buffaloStandard;
+      }
+    } else if (animalType === 'Calf') {
+      primaryProduct = calfFeed;
+    } else if (animalType === 'Pregnant Heifer') {
+      primaryProduct = pick('KKA-DST1-50KG', 'SWN-CAT-50KG', 'PP-GLD-50KG');
+    } else if (wantsVolume || (wantsFatBoost && fatPercentTarget >= 4.5)) {
+      primaryProduct = pick('HOL-XM8-50KG', 'NRT-MB-50KG', 'PP-GLD-50KG');
+    } else if (wantsDigestion) {
+      primaryProduct = pick('NRT-MB-50KG', 'KKA-DST1-50KG', 'PP-GLD-50KG');
+    } else {
+      primaryProduct = dairyCowStandard;
+    }
+
+    if (!primaryProduct) {
+      addToast('The ration calculator could not find a suitable feed in the catalogue. Please seed the database.', 'error');
+      return;
+    }
 
     const recommendedProducts: FeedRecommendationResult['recommendedProducts'] = [];
 
@@ -170,7 +200,7 @@ export const SmartRationQuiz: React.FC = () => {
       recommendedProducts.push({
         product: primaryProduct,
         dailyQtyKg: animalType === 'Calf' ? Math.max(0.25, dailyRationKg * 0.6) : dailyRationKg * 0.7,
-        reasoning: `${energyNote}. ${stageReason}.`,
+        reasoning: `${primaryProduct.name}: ${energyNote}. ${stageReason}.`,
       });
     }
 
@@ -193,13 +223,13 @@ export const SmartRationQuiz: React.FC = () => {
       });
     }
 
-    const wantsFatBoost =
-      healthGoals.includes('Milk Fat % Boost (SNF)') || milkYieldLiters >= 15 || fatPercentTarget > 6;
-    if (bypassFatProduct && wantsFatBoost) {
+    const primaryFat = Number.parseFloat(primaryProduct.nutritionalInfo.crudeFat);
+    const feedAlreadyHighFat = Number.isFinite(primaryFat) && primaryFat >= 6;
+    if (bypassFatProduct && wantsFatBoost && !feedAlreadyHighFat) {
       recommendedProducts.push({
         product: bypassFatProduct,
         dailyQtyKg: 0.15,
-        reasoning: 'Bypass fat to support energy balance when targeting higher fat test',
+        reasoning: 'Bypass fat to top up energy when the base feed does not already claim 6%+ fat',
       });
     }
 
@@ -211,7 +241,11 @@ export const SmartRationQuiz: React.FC = () => {
       healthBenefits.push('Calcium support around calving (monitor with your vet for milk fever risk)');
     }
     if (wantsFatBoost) {
-      healthBenefits.push('Bypass fat included for energy density during peak yield');
+      healthBenefits.push(
+        feedAlreadyHighFat
+          ? 'Selected base feed already carries a 6%+ fat claim'
+          : 'Bypass fat included for energy density during peak yield'
+      );
     }
     if (animalType === 'Calf') {
       healthBenefits.push('Starter feed supports early rumen development');

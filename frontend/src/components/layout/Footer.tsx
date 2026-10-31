@@ -26,9 +26,7 @@ export const Footer: React.FC = () => {
         <div className="grid gap-10 md:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2 lg:pr-12">
             <div className="flex items-center gap-2.5">
-              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-pine font-display text-lg font-semibold text-cream">
-                H
-              </span>
+              <img src="/brand/hindavi-logo.png" alt="" className="h-12 w-auto" />
               <span className="font-display text-xl font-semibold tracking-tight text-ink">{STORE.name}</span>
             </div>
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-ink-soft">{t('common.footerBlurb')}</p>

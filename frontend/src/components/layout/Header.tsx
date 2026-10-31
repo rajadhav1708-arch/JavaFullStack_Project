@@ -94,9 +94,11 @@ export const Header: React.FC = () => {
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-[4.5rem] items-center justify-between gap-4">
           <button onClick={() => goTo('/home')} className="group flex shrink-0 items-center gap-2.5 text-left">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-pine font-display text-lg font-semibold text-cream transition-transform group-hover:-rotate-3">
-              H
-            </span>
+            <img
+              src="/brand/hindavi-logo.png"
+              alt=""
+              className="h-11 w-auto shrink-0 transition-transform group-hover:-rotate-2 sm:h-12"
+            />
             <span className="leading-tight">
               <span className="block font-display text-lg font-semibold tracking-tight text-ink">
                 {STORE.name}

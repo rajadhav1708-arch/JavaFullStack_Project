@@ -1,7 +1,7 @@
 # Hindavi Traders (PashuFeed Pro)
 
 Cattle feed shop and farm management platform for dairy farmers and shop
-owners in Kolhapur district. Covers the storefront, POS counter billing,
+owners in Chinchpur district. Covers the storefront, POS counter billing,
 inventory view, the farmer credit ledger (Khata), a rule-based ration
 calculator, and an AI feed assistant (Gemini).
 

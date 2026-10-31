@@ -117,6 +117,11 @@ ALTER TABLE products ADD COLUMN IF NOT EXISTS tags TEXT[] NOT NULL DEFAULT '{}';
 -- The three feature bullets a product card shows above the price.
 ALTER TABLE products ADD COLUMN IF NOT EXISTS highlights TEXT[] NOT NULL DEFAULT '{}';
 
+-- New arrivals are presented ahead of the older catalogue in the default shop
+-- sort. `sort_order` gives the owner manual control within each group.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS is_new BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sort_order INT NOT NULL DEFAULT 100;
+
 -- ------------------------------------------------------------------- orders --
 CREATE TABLE IF NOT EXISTS orders (
   id              SERIAL PRIMARY KEY,
@@ -258,6 +263,20 @@ SET customer_code = 'HT-CUS-' || nextval('customer_code_seq')
 WHERE customer_code IS NULL;
 
 CREATE UNIQUE INDEX IF NOT EXISTS users_customer_code_key ON users (customer_code);
+
+-- ---------------------------------------------------------------- username --
+-- A display/modifiable login handle chosen at registration. It can be changed
+-- later from My Account, while the permanent Customer ID (customer_code) stays
+-- fixed for life. Usernames are unique across the shop (NULLs are distinct).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;
+
+-- Backfill accounts created before this column existed from their name so they
+-- can log in with a username right away (spaces stripped, lower-cased).
+UPDATE users
+SET username = lower(regexp_replace(name, '\s+', '', 'g'))
+WHERE username IS NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_username_key ON users (username) WHERE username IS NOT NULL;
 
 -- Email becomes optional. The old unique index stays: Postgres treats NULLs as
 -- distinct in a unique index, so several email-less accounts coexist fine while

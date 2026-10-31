@@ -8,11 +8,14 @@ interface AuthContextType {
   isLoading: boolean;
   /** True when the API reported DB_DISABLED, i.e. accounts cannot be used at all. */
   isUnavailable: boolean;
-  /** identifier is the permanent customer ID (HT-CUS-...) or the email. */
+  csrfToken: string | null;
+  /** Set the CSRF token from the server endpoint. */
+  setCsrfToken: (token: string | null) => void;
   login: (identifier: string, password: string) => Promise<string | null>;
   /** Returns null on success, else the server's message. Email is optional. */
   register: (input: {
     email?: string;
+    username?: string;
     password: string;
     name: string;
     village?: string;
@@ -35,11 +38,16 @@ interface ApiError {
   unavailable: boolean;
 }
 
-async function postAuth(path: string, body: unknown): Promise<{ user: AuthUser } | ApiError> {
+async function postAuth(path: string, body: unknown, csrfToken: string | null): Promise<{ user: AuthUser } | ApiError> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (csrfToken) {
+    headers['X-CSRF-Token'] = csrfToken;
+  }
   const response = await fetch(`/api/auth${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body),
+    credentials: 'same-origin',
   });
 
   let payload: Record<string, unknown> = {};
@@ -66,6 +74,28 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUnavailable, setIsUnavailable] = useState(false);
+  const [csrfToken, setCsrfToken] = useState<string | null>(null);
+
+  // Fetch CSRF token on mount
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch('/api/csrf-token', { credentials: 'same-origin' });
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled) setCsrfToken(data.csrfToken);
+        }
+      } catch {
+        /* offline: no CSRF token */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Restore the session from the httpOnly cookie on first paint.
   useEffect(() => {
@@ -98,18 +128,18 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
   }, [navigate, location]);
 
   const login = useCallback(async (identifier: string, password: string) => {
-    const result = await postAuth('/login', { identifier, password });
+    const result = await postAuth('/login', { identifier, password }, csrfToken);
     if ('code' in result) {
       if (result.unavailable) setIsUnavailable(true);
       return result.message;
     }
     setUser(result.user);
     return null;
-  }, []);
+  }, [csrfToken]);
 
   const register = useCallback(
     async (input: { email?: string; password: string; name: string; village?: string }) => {
-      const result = await postAuth('/register', input);
+      const result = await postAuth('/register', input, csrfToken);
       if ('code' in result) {
         if (result.unavailable) setIsUnavailable(true);
         return { failure: result.message, user: null };
@@ -117,7 +147,7 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       setUser(result.user);
       return { failure: null, user: result.user };
     },
-    []
+    [csrfToken]
   );
 
   const logout = useCallback(async () => {
@@ -134,13 +164,15 @@ const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => 
       user,
       isLoading,
       isUnavailable,
+      csrfToken,
+      setCsrfToken,
       login,
       register,
       logout,
       updateUser: (u) => setUser(u),
       redirectToLogin,
     }),
-    [user, isLoading, isUnavailable, login, register, logout, redirectToLogin]
+    [user, isLoading, isUnavailable, csrfToken, login, register, logout, redirectToLogin]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -38,7 +38,7 @@ export const ProductListing: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [selectedBrand, setSelectedBrand] = useState('All');
   const [selectedAnimal, setSelectedAnimal] = useState<string>('All');
-  const [sortBy, setSortBy] = useState<'popular' | 'price-asc' | 'price-desc' | 'rating'>('popular');
+  const [sortBy, setSortBy] = useState<'newest' | 'popular' | 'price-asc' | 'price-desc' | 'rating'>('newest');
   const [onlyInStock, setOnlyInStock] = useState(false);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
@@ -72,7 +72,14 @@ export const ProductListing: React.FC = () => {
           if (sortBy === 'price-asc') return a.price - b.price;
           if (sortBy === 'price-desc') return b.price - a.price;
           if (sortBy === 'rating') return b.rating - a.rating;
-          return (b.reviewCount || 0) - (a.reviewCount || 0);
+          if (sortBy === 'popular') return (b.reviewCount || 0) - (a.reviewCount || 0);
+
+          return (
+            Number(b.isNew) - Number(a.isNew) ||
+            (a.sortOrder ?? 100) - (b.sortOrder ?? 100) ||
+            Number(b.isBestSeller) - Number(a.isBestSeller) ||
+            (b.reviewCount || 0) - (a.reviewCount || 0)
+          );
         }),
     [products, selectedCategory, selectedBrand, selectedAnimal, onlyInStock, searchQuery, sortBy]
   );
@@ -224,6 +231,7 @@ export const ProductListing: React.FC = () => {
                   onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
                   className="field !w-auto !py-2 font-semibold"
                 >
+                  <option value="newest">{t('shop.sortNewest')}</option>
                   <option value="popular">{t('shop.sortMostReviewed')}</option>
                   <option value="price-asc">{t('shop.sortPriceLowHigh')}</option>
                   <option value="price-desc">{t('shop.sortPriceHighLow')}</option>
@@ -397,10 +405,16 @@ const ProductCardGrid: React.FC<{ product: Product }> = ({ product }) => {
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
 
-        {product.discountPercent > 0 && (
-          <span className="absolute left-2.5 top-2.5 rounded-md bg-ochre px-2 py-0.5 text-[10px] font-black text-ink">
-            {t('shop.off', { n: product.discountPercent })}
+        {product.isNew ? (
+          <span className="absolute left-2.5 top-2.5 rounded-md bg-pine px-2 py-0.5 text-[10px] font-black uppercase tracking-wide text-cream">
+            {t('shop.newBadge')}
           </span>
+        ) : (
+          product.discountPercent > 0 && (
+            <span className="absolute left-2.5 top-2.5 rounded-md bg-ochre px-2 py-0.5 text-[10px] font-black text-ink">
+              {t('shop.off', { n: product.discountPercent })}
+            </span>
+          )
         )}
 
         <div className="absolute right-2.5 top-2.5 flex flex-col gap-1">
@@ -524,6 +538,11 @@ const ProductCardList: React.FC<{ product: Product }> = ({ product }) => {
             <span className="rounded-md bg-pine-soft px-2 py-0.5 text-[10px] font-bold uppercase text-pine">
               {product.brand}
             </span>
+            {product.isNew && (
+              <span className="rounded-md bg-pine px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cream">
+                {t('shop.newBadge')}
+              </span>
+            )}
             {product.suitableFor.length > 0 ? (
               <span className="rounded-md bg-cream px-2 py-0.5 text-[10px] font-bold uppercase text-ink-soft">
                 {product.suitableFor.join(', ')}

@@ -87,7 +87,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
+  const { user, isLoading, csrfToken, setCsrfToken } = useAuth();
   const navigate = useNavigate();
   const [currentView, setCurrentViewState] = useState<MainView>('home');
   const [adminTab, setAdminTab] = useState<AdminTab>('overview');
@@ -131,9 +131,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setWishlistHydratedKey(wishlistKey);
   }, [wishlistKey]);
 
-  React.useEffect(() => {
-    // Wait until the matching wishlist has been loaded so we never persist
-    // the previous user's list under the new user's key.
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch('/api/csrf-token', { credentials: 'same-origin' });
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled) setCsrfToken(data.csrfToken);
+        }
+      } catch {
+        /* offline */
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [setCsrfToken]);
+
+  // Wait until the matching wishlist has been loaded so we never persist
+  // the previous user's list under the new user's key.
+  useEffect(() => {
     if (wishlistHydratedKey !== wishlistKey) return;
     try {
       window.localStorage.setItem(wishlistKey, JSON.stringify(wishlist));
@@ -393,9 +413,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // trustworthy order to record, so fail loudly instead of inventing one.
     let res: Response;
     try {
-      res = await fetch('/api/orders', {
+      const res = await fetch('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
         body: JSON.stringify({
           items: itemsToOrder.map((item) => ({
             productId: item.product.id,
@@ -460,7 +480,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const res = await fetch(`/api/khata/${id}/payment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
         body: JSON.stringify({ amount, notes, paymentMethod }),
       });
       if (!res.ok) {

@@ -7,7 +7,7 @@
 export const STORE = {
   name: 'Hindavi Traders',
   tagline: 'Cattle feed & farm supply',
-  region: 'Kolhapur, Maharashtra',
+  region: 'Chinchpur, Maharashtra',
   phone: '+91 98223 11000',
   phoneHref: 'tel:+919822311000',
   email: 'pratikgunjal.demo@gmail.com',

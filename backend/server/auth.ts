@@ -19,6 +19,7 @@ export interface SessionUser {
   id: number;
   email: string;
   customerCode: string;
+  username: string | null;
   name: string;
   role: 'customer' | 'admin' | 'employee';
   village: string | null;
@@ -119,7 +120,7 @@ export async function currentUser(req: Request): Promise<SessionUser | null> {
   if (!payload) return null;
 
   const rows = await query<SessionUser & { session_version: number }>(
-    'SELECT id, email, customer_code AS "customerCode", name, role, village, session_version FROM users WHERE id = $1',
+    'SELECT id, email, username, customer_code AS "customerCode", name, role, village, session_version FROM users WHERE id = $1',
     [Number(payload.sub)]
   );
   const row = rows[0];

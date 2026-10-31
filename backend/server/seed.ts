@@ -7,20 +7,22 @@ import { CATEGORY_SEED, PRODUCT_SEED } from './seed/catalogue';
  * of each other role so role-based differences are visible without editing the
  * database. Existing rows are updated in place, so re-running is safe.
  */
-const DEMO_USERS: { email: string; password: string; name: string; role: SessionUser['role']; village: string }[] = [
+const DEMO_USERS: { email: string; password: string; name: string; username: string; role: SessionUser['role']; village: string }[] = [
   {
     email: 'admin@pashufeed.test',
     password: 'Admin@12345',
     name: 'Pratik Gunjal',
+    username: 'pratikgunjal',
     role: 'admin',
-    village: 'Kagal, Kolhapur',
+    village: 'Kagal, Chinchpur',
   },
   {
     email: 'farmer@pashufeed.test',
     password: 'Farmer@12345',
     name: 'Sunita Jadhav',
+    username: 'sunitajadhav',
     role: 'customer',
-    village: 'Hesheri, Kolhapur',
+    village: 'Hesheri, Chinchpur',
   },
 ];
 
@@ -52,9 +54,9 @@ async function seedCatalogue(): Promise<void> {
          id, name, brand, category_id, description, suitable_for, nutritional_info,
          ingredients, feeding_instructions, benefits, image, price, original_price,
          discount_percent, default_weight_kg, rating, review_count, stock_count, min_stock_level,
-         sku, batch_number, expiry_date, is_best_seller, is_recommended, unit, tags, highlights
+         sku, batch_number, expiry_date, is_best_seller, is_recommended, is_new, sort_order, unit, tags, highlights
        )
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          brand = EXCLUDED.brand,
@@ -79,6 +81,8 @@ async function seedCatalogue(): Promise<void> {
          expiry_date = EXCLUDED.expiry_date,
          is_best_seller = EXCLUDED.is_best_seller,
          is_recommended = EXCLUDED.is_recommended,
+         is_new = EXCLUDED.is_new,
+         sort_order = EXCLUDED.sort_order,
          unit = EXCLUDED.unit,
          tags = EXCLUDED.tags,
          highlights = EXCLUDED.highlights`,
@@ -88,6 +92,7 @@ async function seedCatalogue(): Promise<void> {
         p.benefits, p.image, p.price, p.originalPrice, p.discountPercent,
         p.selectedWeightKg, p.rating, p.reviewCount, p.stockCount, p.minStockLevel,         p.sku,
         p.batchNumber || null, p.expiryDate || null, p.isBestSeller ?? false, p.isRecommended ?? false,
+        p.isNew ?? false, p.sortOrder ?? 100,
         p.unit, p.tags, p.highlights,
       ]
     );
@@ -127,16 +132,17 @@ async function main(): Promise<void> {
   console.log('Seeding demo accounts:\n');
 
   for (const user of DEMO_USERS) {
-    const rows = await query<{ id: number; email: string; customer_code: string; name: string; role: string; village: string }>(
-      `INSERT INTO users (email, password_hash, name, role, village, customer_code)
-       VALUES ($1, $2, $3, $4, $5, 'HT-CUS-' || nextval('customer_code_seq'))
+    const rows = await query<{ id: number; email: string; username: string | null; customer_code: string; name: string; role: string; village: string }>(
+      `INSERT INTO users (email, username, password_hash, name, role, village, customer_code)
+       VALUES ($1, $2, $3, $4, $5, $6, 'HT-CUS-' || nextval('customer_code_seq'))
        ON CONFLICT (email) DO UPDATE
          SET password_hash = EXCLUDED.password_hash,
+             username = EXCLUDED.username,
              name = EXCLUDED.name,
              role = EXCLUDED.role,
              village = EXCLUDED.village
-       RETURNING id, email, customer_code, name, role, village`,
-      [user.email, await hashPassword(user.password), user.name, user.role, user.village]
+       RETURNING id, email, username, customer_code, name, role, village`,
+      [user.email, user.username, await hashPassword(user.password), user.name, user.role, user.village]
     );
     console.log(`  ${rows[0].role.padEnd(8)} ${rows[0].customer_code}  ${rows[0].email.padEnd(26)} password: ${user.password}`);
   }

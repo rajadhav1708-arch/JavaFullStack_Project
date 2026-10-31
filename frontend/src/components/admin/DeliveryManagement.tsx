@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Truck, Phone, Package } from 'lucide-react';
 
 const ORDER_STATUSES = [
@@ -14,6 +15,7 @@ const ORDER_STATUSES = [
 
 export const DeliveryManagement: React.FC = () => {
   const { orders, refreshOrders, addToast } = useApp();
+  const { csrfToken } = useAuth();
   const [updatingId, setUpdatingId] = useState<string | null>(null);
 
   /** The owner drives the live-tracking timeline: each change here is the
@@ -24,7 +26,7 @@ export const DeliveryManagement: React.FC = () => {
     try {
       const res = await fetch(`/api/orders/${orderId.replace('ord-', '')}/status`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {} ) },
         body: JSON.stringify({ status }),
       });
       const body = await res.json().catch(() => ({}));
@@ -48,7 +50,7 @@ export const DeliveryManagement: React.FC = () => {
     try {
       const res = await fetch(`/api/orders/${orderId.replace('ord-', '')}/payment`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {} ) },
         body: JSON.stringify({ paymentStatus: 'Paid' }),
       });
       const body = await res.json().catch(() => ({}));

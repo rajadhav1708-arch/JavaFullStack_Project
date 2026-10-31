@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { STORE } from '../../data/store';
 import { KhataAccount, KhataTransaction } from '../../types';
 import {
@@ -48,12 +49,13 @@ interface CustomerSearchResult {
 
 /**
  * The shop's Khata management screen: the pending-approval queue, every
- * account with its lifecycle status, and per-account actions — approve,
+ * account with its lifecycle status, and per-account actions â€” approve,
  * reject, suspend, reactivate, record payments, reverse mistaken entries.
  * All writes go to the server; nothing here is trusted with the balance.
  */
 export const KhataLedger: React.FC = () => {
   const { khataRecords, fetchKhata, addKhataPayment, addToast } = useApp();
+  const { csrfToken } = useAuth();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
@@ -83,7 +85,7 @@ export const KhataLedger: React.FC = () => {
       try {
         const res = await fetch(path, {
           method,
-          headers: body ? { 'Content-Type': 'application/json' } : undefined,
+          headers: body ? { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {} ) } : undefined,
           body: body ? JSON.stringify(body) : undefined,
         });
         const data = (await res.json().catch(() => ({}))) as { message?: string };
@@ -131,7 +133,7 @@ export const KhataLedger: React.FC = () => {
     const digits = record.phone.replace(/\D/g, '');
     const text =
       `Namaskar ${record.customerName}, this is ${STORE.name}. ` +
-      `Your khata has an outstanding balance of ₹${record.totalOutstanding.toLocaleString('en-IN')}` +
+      `Your khata has an outstanding balance of â‚¹${record.totalOutstanding.toLocaleString('en-IN')}` +
       (record.dueDate ? ` (due ${record.dueDate})` : '') +
       `. Please settle at the shop or call us on ${STORE.phone}. Thank you.`;
     window.open(
@@ -152,7 +154,7 @@ export const KhataLedger: React.FC = () => {
           <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-ink-soft">
             <span>
               Outstanding (approved):{' '}
-              <strong className="text-clay">₹{outstandingTotal.toLocaleString('en-IN')}</strong>
+              <strong className="text-clay">â‚¹{outstandingTotal.toLocaleString('en-IN')}</strong>
             </span>
             {pendingCount > 0 && (
               <span className="font-bold text-[#7a4d12]">{pendingCount} pending request(s)</span>
@@ -165,7 +167,7 @@ export const KhataLedger: React.FC = () => {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-soft" />
             <input
               type="text"
-              placeholder="Name, phone, village or Customer ID…"
+              placeholder="Name, phone, village or Customer IDâ€¦"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="field !pl-9"
@@ -238,7 +240,7 @@ export const KhataLedger: React.FC = () => {
                 <div>
                   <h2 className="text-base font-bold text-ink">{record.customerName}</h2>
                   <p className="text-xs text-ink-soft">
-                    {record.village} · {record.phone}
+                    {record.village} Â· {record.phone}
                   </p>
                   {record.status === 'Rejected' && record.rejectionReason && (
                     <p className="mt-1 text-[11px] text-clay">Reason: {record.rejectionReason}</p>
@@ -249,24 +251,24 @@ export const KhataLedger: React.FC = () => {
                   <div className="flex justify-between text-ink-soft">
                     <span>Credit limit</span>
                     <span className="font-bold text-ink">
-                      ₹{record.totalCreditLimit.toLocaleString('en-IN')}
+                      â‚¹{record.totalCreditLimit.toLocaleString('en-IN')}
                     </span>
                   </div>
                   <div className="flex justify-between text-ink-soft">
                     <span>Outstanding</span>
                     <span className="font-bold text-clay">
-                      ₹{record.totalOutstanding.toLocaleString('en-IN')}
+                      â‚¹{record.totalOutstanding.toLocaleString('en-IN')}
                     </span>
                   </div>
                   <div className="flex justify-between text-ink-soft">
                     <span>Available credit</span>
                     <span className="font-bold text-pine">
-                      ₹{record.availableCredit.toLocaleString('en-IN')}
+                      â‚¹{record.availableCredit.toLocaleString('en-IN')}
                     </span>
                   </div>
                   <div className="flex justify-between border-t border-line pt-1 text-[11px] text-ink-soft">
                     <span>Due date</span>
-                    <span className="font-bold text-ink">{record.dueDate || '—'}</span>
+                    <span className="font-bold text-ink">{record.dueDate || 'â€”'}</span>
                   </div>
                 </div>
               </div>
@@ -484,7 +486,7 @@ const PaymentModal: React.FC<{
           </span>
           <h2 className="mt-1 text-lg text-ink">{record.customerName}</h2>
           <p className="text-xs text-ink-soft">
-            Current outstanding: ₹{record.totalOutstanding.toLocaleString('en-IN')}
+            Current outstanding: â‚¹{record.totalOutstanding.toLocaleString('en-IN')}
           </p>
         </div>
 
@@ -496,7 +498,7 @@ const PaymentModal: React.FC<{
           className="space-y-4 text-xs"
         >
           <label className="block">
-            <span className="mb-1 block font-bold text-ink">Amount received (₹)</span>
+            <span className="mb-1 block font-bold text-ink">Amount received (â‚¹)</span>
             <input
               type="number"
               required
@@ -627,7 +629,7 @@ const CreateKhataModal: React.FC<{
           <h2 className="mt-1 text-lg text-ink">Create for an existing customer</h2>
           <p className="mt-0.5 text-xs leading-relaxed text-ink-soft">
             Search by name, email or Customer ID. The account links to the customer's
-            existing sign-in — no second identity is created.
+            existing sign-in â€” no second identity is created.
           </p>
         </div>
 
@@ -640,15 +642,15 @@ const CreateKhataModal: React.FC<{
                 type="text"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Sunita, HT-CUS-10042, farmer@…"
+                placeholder="Sunita, HT-CUS-10042, farmer@â€¦"
                 className="field !pl-9"
               />
             </div>
-            {searching && <p className="text-xs text-ink-soft">Searching…</p>}
+            {searching && <p className="text-xs text-ink-soft">Searchingâ€¦</p>}
             {results.length === 0 && query.trim() && !searching && (
               <p className="rounded-xl border border-line bg-cream/60 p-3 text-xs text-ink-soft">
                 No registered customer matches. They can create an account from the shop
-                first — no email is needed to register.
+                first â€” no email is needed to register.
               </p>
             )}
             <div className="max-h-64 space-y-1 overflow-y-auto">
@@ -666,8 +668,8 @@ const CreateKhataModal: React.FC<{
                     <p className="font-bold text-ink">{customer.name}</p>
                     <p className="text-[11px] text-ink-soft">
                       {customer.customerCode}
-                      {customer.email ? ` · ${customer.email}` : ''}
-                      {customer.village ? ` · ${customer.village}` : ''}
+                      {customer.email ? ` Â· ${customer.email}` : ''}
+                      {customer.village ? ` Â· ${customer.village}` : ''}
                     </p>
                   </div>
                   {customer.hasKhata && (
@@ -685,7 +687,7 @@ const CreateKhataModal: React.FC<{
               <p className="font-bold text-pine">{selected.name}</p>
               <p className="text-[11px] text-pine/70">
                 {selected.customerCode}
-                {selected.email ? ` · ${selected.email}` : ''}
+                {selected.email ? ` Â· ${selected.email}` : ''}
               </p>
               <button
                 type="button"
@@ -712,7 +714,7 @@ const CreateKhataModal: React.FC<{
               <input type="text" value={milkUnionId} onChange={(e) => setMilkUnionId(e.target.value)} className="field" />
             </label>
             <label className="block">
-              <span className="mb-1 block font-bold text-ink">Credit limit (₹)</span>
+              <span className="mb-1 block font-bold text-ink">Credit limit (â‚¹)</span>
               <input
                 type="number"
                 min={0}
@@ -786,8 +788,8 @@ const LedgerDetailModal: React.FC<{
             </div>
             <h2 className="mt-1 text-lg text-ink">{record.customerName}</h2>
             <p className="text-xs text-ink-soft">
-              {record.village} · {record.phone}
-              {record.customerEmail ? ` · ${record.customerEmail}` : ''}
+              {record.village} Â· {record.phone}
+              {record.customerEmail ? ` Â· ${record.customerEmail}` : ''}
             </p>
             {record.status === 'Rejected' && record.rejectionReason && (
               <p className="mt-1 text-[11px] text-clay">Rejected: {record.rejectionReason}</p>
@@ -795,15 +797,15 @@ const LedgerDetailModal: React.FC<{
           </div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-right text-xs">
             <span className="text-ink-soft">Limit</span>
-            <span className="font-bold text-ink">₹{record.totalCreditLimit.toLocaleString('en-IN')}</span>
+            <span className="font-bold text-ink">â‚¹{record.totalCreditLimit.toLocaleString('en-IN')}</span>
             <span className="text-ink-soft">Outstanding</span>
-            <span className="font-bold text-clay">₹{record.totalOutstanding.toLocaleString('en-IN')}</span>
+            <span className="font-bold text-clay">â‚¹{record.totalOutstanding.toLocaleString('en-IN')}</span>
             <span className="text-ink-soft">Available</span>
-            <span className="font-bold text-pine">₹{record.availableCredit.toLocaleString('en-IN')}</span>
+            <span className="font-bold text-pine">â‚¹{record.availableCredit.toLocaleString('en-IN')}</span>
             <span className="text-ink-soft">Purchases</span>
-            <span className="font-bold text-ink">₹{(record.purchaseTotal ?? 0).toLocaleString('en-IN')}</span>
+            <span className="font-bold text-ink">â‚¹{(record.purchaseTotal ?? 0).toLocaleString('en-IN')}</span>
             <span className="text-ink-soft">Payments</span>
-            <span className="font-bold text-ink">₹{(record.paidAmount ?? 0).toLocaleString('en-IN')}</span>
+            <span className="font-bold text-ink">â‚¹{(record.paidAmount ?? 0).toLocaleString('en-IN')}</span>
           </div>
         </div>
 
@@ -853,7 +855,7 @@ const LedgerDetailModal: React.FC<{
         {(record.status === 'Approved' || record.status === 'Suspended') && (
           <div className="flex flex-wrap items-end gap-2 rounded-2xl border border-line bg-cream/60 p-3 text-xs">
             <label className="block">
-              <span className="mb-1 block font-bold text-ink">Credit limit (₹)</span>
+              <span className="mb-1 block font-bold text-ink">Credit limit (â‚¹)</span>
               <input
                 type="number"
                 min={0}
@@ -875,7 +877,7 @@ const LedgerDetailModal: React.FC<{
         <div>
           <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-ink">Transaction history</h3>
           <p className="mt-0.5 text-[11px] text-ink-soft">
-            Entries are append-only. Mistakes are corrected with a reversing adjustment —
+            Entries are append-only. Mistakes are corrected with a reversing adjustment â€”
             nothing is ever edited or deleted.
           </p>
           <div className="mt-2 overflow-hidden rounded-2xl border border-line">
@@ -893,14 +895,14 @@ const LedgerDetailModal: React.FC<{
                       <p className="text-ink-soft">{tx.notes}</p>
                       <p className="mt-0.5 text-[11px] text-ink-soft">
                         {tx.date}
-                        {tx.orderNumber ? ` · ${tx.orderNumber}` : ''}
-                        {tx.paymentMethod ? ` · ${tx.paymentMethod}` : ''}
-                        {tx.recordedBy ? ` · by ${tx.recordedBy}` : ''}
+                        {tx.orderNumber ? ` Â· ${tx.orderNumber}` : ''}
+                        {tx.paymentMethod ? ` Â· ${tx.paymentMethod}` : ''}
+                        {tx.recordedBy ? ` Â· by ${tx.recordedBy}` : ''}
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       <p className={`font-bold ${tx.isDebit ? 'text-clay' : 'text-pine'}`}>
-                        {tx.isDebit ? '+' : '−'}₹{tx.amount.toLocaleString('en-IN')}
+                        {tx.isDebit ? '+' : 'âˆ’'}â‚¹{tx.amount.toLocaleString('en-IN')}
                       </p>
                       {(tx.type === 'Purchase' || tx.type === 'Payment') && (
                         <button
@@ -923,3 +925,4 @@ const LedgerDetailModal: React.FC<{
     </div>
   );
 };
+

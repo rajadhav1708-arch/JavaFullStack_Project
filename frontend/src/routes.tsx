@@ -26,7 +26,7 @@ import { AdminLayout } from './components/admin/AdminLayout';
 import { AIChatbotWidget } from './components/chat/AIChatbotWidget';
 import { LoginPage } from './components/auth/LoginPage';
 import { useRevealOnScroll } from './hooks/useRevealOnScroll';
-import { useScrollFrame } from './hooks/useScrollProgress';
+import { useScrollFrame, useSectionsParallax } from './hooks/useScrollProgress';
 import type { MainView } from './types';
 
 const pageVariants = {
@@ -70,6 +70,20 @@ const ScrollProgressBar: React.FC = () => {
         id="scroll-progress-bar"
         className="h-full w-full bg-gradient-to-r from-pine to-ochre"
       />
+    </div>
+  );
+};
+
+const HomeParallaxSections: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { ref } = useSectionsParallax<HTMLDivElement>();
+
+  return (
+    <div ref={ref} className="space-y-12">
+      {React.Children.map(children, (child, index) => (
+        <div key={index} data-parallax-section className="parallax-section">
+          {child}
+        </div>
+      ))}
     </div>
   );
 };
@@ -183,20 +197,16 @@ const MainRoutes: React.FC = () => {
               <Route path="/login" element={<PageWrapper><LoginPage /></PageWrapper>} />
               <Route path="/home" element={
                 <PageWrapper>
-                  <div className="space-y-12 pb-12">
+                  <div id="home-page" className="space-y-12 pb-12">
                     <HeroSection />
-                    {/* Empty scroll stage: after the hero (video card) leaves the
-                        viewport, only the full-opacity scrubbed background is
-                        visible here — no content renders until the stage ends. */}
-                    <div id="home-stage" className="h-[120vh]" aria-hidden="true" />
-                    {/* Revealed only after the stage parallax completes —
-                        html[data-parallax-done] flips `.home-reveal` (index.css).
-                        Stays visible if the animation cannot run. */}
-                    <div className="home-reveal space-y-12">
+                    {/* Short empty stage: the hero's video card leaves first,
+                        then the full-opacity scrub carries into the content. */}
+                    <div id="home-stage" className="h-[100vh]" aria-hidden="true" />
+                    <HomeParallaxSections>
                       <FarmerServicesSection />
                       <HowItWorksSection />
                       <HomeTrustCta />
-                    </div>
+                    </HomeParallaxSections>
                   </div>
                 </PageWrapper>
               } />

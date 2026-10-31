@@ -3,6 +3,9 @@
 // backend/server/index.ts
 import express from "express";
 import helmet from "helmet";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import csurf from "csurf";
 import { GoogleGenAI } from "@google/genai";
 
 // backend/server/env.ts
@@ -149,7 +152,7 @@ async function currentUser(req) {
   const payload = verifySessionToken(token);
   if (!payload) return null;
   const rows = await query(
-    'SELECT id, email, customer_code AS "customerCode", name, role, village, session_version FROM users WHERE id = $1',
+    'SELECT id, email, username, customer_code AS "customerCode", name, role, village, session_version FROM users WHERE id = $1',
     [Number(payload.sub)]
   );
   const row = rows[0];
@@ -232,10 +235,10 @@ var limiter = (limit, windowMs = 15 * 60 * 1e3) => rateLimit({
     message: "Too many attempts. Please wait a few minutes and try again."
   }
 });
-var loginLimiter = limiter(20);
-var registerLimiter = limiter(10, 60 * 60 * 1e3);
-var forgotLimiter = limiter(5);
-var resetLimiter = limiter(10);
+var loginLimiter = limiter(5);
+var registerLimiter = limiter(5, 60 * 60 * 1e3);
+var forgotLimiter = limiter(3);
+var resetLimiter = limiter(5);
 var emailSchema = z.string().trim().max(254).refine(
   (value) => value === "" || z.string().email().safeParse(value).success,
   "Enter a valid email address."
@@ -245,12 +248,16 @@ var registerSchema = z.object({
   // be forced to invent a fake address. When present it must be valid, and it
   // unlocks the self-service password-reset link.
   email: emailSchema.optional().default(""),
+  username: z.string().trim().min(3, "Username must be at least 3 characters.").max(120, "Username is too long.").refine(
+    (value) => /^[a-z0-9_-]+$/i.test(value),
+    "Username may only contain letters, numbers, underscores and hyphens."
+  ),
   password: z.string().min(MIN_PASSWORD_LENGTH, `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`).max(200, "Password is too long."),
   name: z.string().trim().min(1, "Enter your name.").max(120, "Name is too long."),
   village: z.string().trim().max(120, "Village name is too long.").optional().default("")
 });
 var loginSchema = z.object({
-  identifier: z.string().trim().min(3, "Enter your Customer ID or email.").max(254),
+  identifier: z.string().trim().min(3, "Enter your username or Customer ID.").max(254),
   password: z.string().min(1, "Enter your password.").max(200)
 });
 var forgotSchema = z.object({ email: emailSchema });
@@ -285,17 +292,17 @@ authRouter.post("/register", registerLimiter, dbGuard, async (req, res) => {
   const normalisedEmail = parsed2.data.email ? normaliseEmail(parsed2.data.email) : null;
   try {
     const rows = await query(
-      `INSERT INTO users (email, password_hash, name, role, village, customer_code)
-       VALUES ($1, $2, $3, 'customer', $4, 'HT-CUS-' || nextval('customer_code_seq'))
-       RETURNING id, email, customer_code AS "customerCode", name, role, village, session_version`,
-      [normalisedEmail, await hashPassword(password), name, village || null]
+      `INSERT INTO users (email, username, password_hash, name, role, village, customer_code)
+       VALUES ($1, $2, $3, $4, 'customer', $5, 'HT-CUS-' || nextval('customer_code_seq'))
+       RETURNING id, email, username, customer_code AS "customerCode", name, role, village, session_version`,
+      [normalisedEmail, parsed2.data.username || null, await hashPassword(password), name, village || null]
     );
     const { session_version, ...user } = rows[0];
     setSessionCookie(res, signSession(user, session_version));
     sendUser(res, user);
   } catch (error) {
     if (isUniqueViolation(error)) {
-      res.status(409).json({ error: "EMAIL_TAKEN", message: "An account with that email already exists." });
+      res.status(409).json({ error: "USERNAME_TAKEN", message: "That username is already taken. Choose another." });
       return;
     }
     if (error instanceof DbUnavailableError) {
@@ -315,9 +322,9 @@ authRouter.post("/login", loginLimiter, dbGuard, async (req, res) => {
   const identifier = parsed2.data.identifier.trim();
   try {
     const rows = await query(
-      `SELECT id, email, customer_code AS "customerCode", name, role, village, password_hash, session_version
-       FROM users
-       WHERE upper(customer_code) = upper($1) OR (email IS NOT NULL AND lower(email) = lower($1))`,
+      `SELECT id, email, username, customer_code AS "customerCode", name, role, village, password_hash, session_version
+         FROM users
+         WHERE upper(customer_code) = upper($1) OR (username IS NOT NULL AND lower(username) = lower($1))`,
       [identifier]
     );
     const user = rows[0];
@@ -420,16 +427,31 @@ authRouter.patch("/me", dbGuard, async (req, res) => {
       res.status(401).json({ error: "NOT_AUTHENTICATED", message: "No active session." });
       return;
     }
-    const { name, village } = req.body ?? {};
+    const { name, village, username } = req.body ?? {};
     if (typeof name !== "undefined" && (typeof name !== "string" || !name.trim())) {
       res.status(400).json({ error: "BAD_NAME", message: "Enter a valid name." });
       return;
     }
-    const rows = await query(
-      'UPDATE users SET name = COALESCE($1, name), village = COALESCE($2, village) WHERE id = $3 RETURNING id, email, customer_code AS "customerCode", name, role, village',
-      [typeof name === "string" ? name.trim() : null, typeof village === "string" ? village.trim() : null, user.id]
-    );
-    sendUser(res, rows[0]);
+    if (typeof username !== "undefined") {
+      if (typeof username !== "string" || !/^[a-z0-9_-]+$/i.test(username.trim())) {
+        res.status(400).json({ error: "BAD_USERNAME", message: "Username may only contain letters, numbers, underscores and hyphens." });
+        return;
+      }
+    }
+    try {
+      const rows = await query(
+        'UPDATE users SET name = COALESCE($1, name), village = COALESCE($2, village), username = COALESCE($3, username) WHERE id = $4 RETURNING id, email, username, customer_code AS "customerCode", name, role, village',
+        [typeof name === "string" ? name.trim() : null, typeof village === "string" ? village.trim() : null, typeof username === "string" ? username.trim() : null, user.id]
+      );
+      sendUser(res, rows[0]);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        res.status(409).json({ error: "USERNAME_TAKEN", message: "That username is already taken. Choose another." });
+        return;
+      }
+      console.error("[api/auth/me PATCH]", error);
+      res.status(500).json({ error: "SERVER_ERROR", message: "Could not update the profile." });
+    }
   } catch (error) {
     console.error("[api/auth/me PATCH]", error);
     res.status(500).json({ error: "SERVER_ERROR", message: "Could not update the profile." });
@@ -481,7 +503,7 @@ var PRODUCT_COLUMNS = `
   -- JSON-serialises back a day earlier in any timezone ahead of UTC, so an
   -- expiry of 2027-02-01 would reach the browser as 2027-01-31.
   to_char(p.expiry_date, 'YYYY-MM-DD') AS expiry_date,
-  p.is_best_seller, p.is_recommended, p.default_weight_kg,
+  p.is_best_seller, p.is_recommended, p.is_new, p.sort_order, p.default_weight_kg,
   ${VARIANTS_JSON}
 `;
 function toProduct(row) {
@@ -517,7 +539,9 @@ function toProduct(row) {
     expiryDate: row.expiry_date ?? "",
     image: row.image ?? "",
     isBestSeller: row.is_best_seller,
-    isRecommended: row.is_recommended
+    isRecommended: row.is_recommended,
+    isNew: row.is_new,
+    sortOrder: row.sort_order
   };
 }
 productsRouter.get("/categories", dbGuard2, async (_req, res) => {
@@ -566,7 +590,7 @@ productsRouter.get("/products", dbGuard2, async (req, res) => {
       `SELECT ${PRODUCT_COLUMNS}
        FROM products p
        ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-       ORDER BY p.is_best_seller DESC, p.rating DESC, p.name`,
+       ORDER BY p.is_new DESC, p.sort_order ASC, p.is_best_seller DESC, p.rating DESC, p.name`,
       params
     );
     res.json({ products: rows.map(toProduct) });
@@ -1888,7 +1912,7 @@ adminRouter.delete("/admin/block/:ip", async (req, res) => {
 
 // backend/server/index.ts
 var PORT = Number(process.env.PORT ?? 3001);
-var MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+var MODEL = process.env.GEMINI_MODEL ?? "gemini-3.8-flash";
 var RAW_API_KEY = process.env.GEMINI_API_KEY;
 var API_KEY = RAW_API_KEY && !RAW_API_KEY.startsWith("your-") ? RAW_API_KEY : void 0;
 var ALLOWED_VIEWS = [
@@ -1960,7 +1984,7 @@ ${lines}`);
     );
   }
   if (cachedWeather) {
-    parts.push(`Current weather near the shop (Kolhapur, Maharashtra): ${cachedWeather}`);
+    parts.push(`Current weather near the shop (Chinchpur, Maharashtra): ${cachedWeather}`);
   }
   return parts.length ? `
 
@@ -2000,18 +2024,40 @@ app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(
   helmet({
-    // The SPA is served by Vite in development and a static host in production;
-    // a strict CSP here would only govern API responses and break nothing.
     contentSecurityPolicy: false,
-    crossOriginEmbedderPolicy: false
+    crossOriginEmbedderPolicy: false,
+    hsts: process.env.NODE_ENV === "production" ? { maxAge: 31536e3, includeSubDomains: true } : false
+  })
+);
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 app.use(express.json({ limit: "256kb" }));
+app.use(cookieParser());
+app.use(
+  csurf({
+    // The SPA sends the token as `X-CSRF-Token`; csurf's default header is
+    // `csrf-token`, which would reject every mutation with a 403.
+    header: "x-csrf-token",
+    cookie: {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production"
+    }
+  })
+);
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true, model: MODEL, aiEnabled: Boolean(API_KEY) });
 });
 app.get("/api/health/db", async (_req, res) => {
   res.json({ db: await checkDb() });
+});
+app.get("/api/csrf-token", (req, res) => {
+  res.json({ csrfToken: req.csrfToken() });
 });
 app.use("/api", async (req, res, next) => {
   if (!isDbConfigured || !pool) return next();

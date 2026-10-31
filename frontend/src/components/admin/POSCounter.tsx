@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { STORE } from '../../data/store';
 import { Product, CartItem, Order } from '../../types';
 import { printBill } from '../../utils/printBill';
@@ -13,6 +14,7 @@ import { Store, Search, Printer, X } from 'lucide-react';
  */
 export const POSCounter: React.FC = () => {
   const { products, setProducts, khataRecords, placeOrder, addToast } = useApp();
+  const { user, csrfToken } = useAuth();
 
   const [search, setSearch] = useState('');
   const [posCart, setPosCart] = useState<{ product: Product; weightKg: number; price: number; quantity: number }[]>([]);
@@ -124,7 +126,7 @@ export const POSCounter: React.FC = () => {
       if (paymentMode !== 'Khata Credit') {
         await fetch(`/api/orders/${order.id.replace('ord-', '')}/payment`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
           body: JSON.stringify({ paymentStatus: 'Paid' }),
         }).catch(() => {
           addToast('Order placed, but marking it paid failed. Confirm it from Dispatch.', 'warning');

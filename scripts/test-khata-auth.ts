@@ -20,7 +20,7 @@ function ok(name: string, cond: boolean, detail = ''): void {
 
 interface Client {
   cookie: string;
-  user: { id: number; email: string; customerCode: string; name: string; role: string } | null;
+  user: { id: number; email: string; customerCode: string; username: string | null; name: string; role: string } | null;
 }
 
 async function req(
@@ -47,7 +47,7 @@ async function req(
 
 async function register(
   c: Client,
-  input: { email?: string; password: string; name: string; village?: string }
+  input: { email?: string; username?: string; password: string; name: string; village?: string }
 ): Promise<number> {
   const r = await req(c, 'POST', '/api/auth/register', input);
   if (r.json.user) c.user = r.json.user;
@@ -65,7 +65,7 @@ async function main(): Promise<void> {
   const stamp = Date.now();
 
   const alice = { cookie: '', user: null } as Client;
-  const s1 = await register(alice, { password: 'Test@1234', name: `Alice Test ${stamp}`, village: 'Pachani' });
+  const s1 = await register(alice, { username: `alicetest${stamp}`, password: 'Test@1234', name: `Alice Test ${stamp}`, village: 'Pachani' });
   ok('register without email succeeds', s1 === 200 && !!alice.user, `status=${s1}`);
   ok('customer code generated (HT-CUS-*)', /^HT-CUS-\d+$/.test(alice.user?.customerCode ?? ''), alice.user?.customerCode);
 
@@ -80,12 +80,12 @@ async function main(): Promise<void> {
   ok('login is case-insensitive on the ID', s2b === 200, `status=${s2b}`);
 
   const bob = { cookie: '', user: null } as Client;
-  const s3 = await register(bob, { email: `bob${stamp}@test.dev`, password: 'Test@1234', name: `Bob Test ${stamp}` });
+  const s3 = await register(bob, { username: `bobtest${stamp}`, email: `bob${stamp}@test.dev`, password: 'Test@1234', name: `Bob Test ${stamp}` });
   ok('register WITH email succeeds', s3 === 200 && !!bob.user?.email, `status=${s3}`);
   ok('bob got a different code', bob.user?.customerCode !== aliceCode);
 
   const dupEmail = { cookie: '', user: null } as Client;
-  const s4 = await register(dupEmail, { email: `bob${stamp}@test.dev`, password: 'Test@1234', name: 'Dup' });
+  const s4 = await register(dupEmail, { username: `bobtestdup${stamp}`, email: `bob${stamp}@test.dev`, password: 'Test@1234', name: 'Dup' });
   ok('duplicate email rejected 409', s4 === 409, `status=${s4}`);
 
   const badLogin = { cookie: '', user: null } as Client;
@@ -94,8 +94,8 @@ async function main(): Promise<void> {
 
   // Admin seeded account
   const admin = { cookie: '', user: null } as Client;
-  const s6 = await login(admin, 'admin@pashufeed.test', 'Admin@12345');
-  ok('admin login by email still works', s6 === 200 && admin.user?.role === 'admin', `status=${s6}`);
+  const s6 = await login(admin, 'pratikgunjal', 'Admin@12345');
+  ok('admin login by username works', s6 === 200 && admin.user?.role === 'admin', `status=${s6}`);
   ok('admin also has a customer code', /^HT-CUS-\d+$/.test(admin.user?.customerCode ?? ''));
 
   const adminCode = admin.user!.customerCode;

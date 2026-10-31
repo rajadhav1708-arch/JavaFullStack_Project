@@ -15,6 +15,7 @@ export const AccountPage: React.FC = () => {
 
   const [name, setName] = useState(user?.name ?? '');
   const [village, setVillage] = useState(user?.village ?? '');
+  const [username, setUsername] = useState(user?.username ?? '');
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,7 +43,7 @@ export const AccountPage: React.FC = () => {
       const res = await fetch('/api/auth/me', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), village: village.trim() }),
+        body: JSON.stringify({ name: name.trim(), village: village.trim(), username: username.trim() }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -86,6 +87,10 @@ export const AccountPage: React.FC = () => {
           <label className="block">
             <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">Village / town</span>
             <input value={village} onChange={(event) => setVillage(event.target.value)} className="field" autoComplete="address-level2" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">Username (changeable)</span>
+            <input value={username} onChange={(event) => setUsername(event.target.value)} className="field" autoComplete="username" />
           </label>
           <div>
             <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-ink-soft">Customer ID (permanent)</span>
